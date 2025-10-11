@@ -444,6 +444,7 @@ export default function App() {
     reader.onload = async (event) => {
       try {
         const data = JSON.parse(event.target?.result as string);
+        console.log("Importing data:", data);
 
         // Clear existing data
         const setsCollection = collection(db, "sets");
@@ -454,6 +455,7 @@ export default function App() {
         setsSnapshot.forEach(async (doc) => {
           await deleteDoc(doc.ref);
         });
+
         const soldSetsSnapshot = await getDocs(soldSetsCollection);
         soldSetsSnapshot.forEach(async (doc) => {
           await deleteDoc(doc.ref);
@@ -461,11 +463,17 @@ export default function App() {
 
         // Check if the JSON file is in the old format (with imageCache)
         if (data.imageCache) {
+          console.log("Detected old format with imageCache");
+
           // Restore the image cache
           setImageCache(data.imageCache);
 
           // Import sets with image hashes
           for (const set of data.sets || []) {
+            if (!set.photo || !data.imageCache[set.photo]) {
+              console.error("Missing photo data for set:", set);
+              continue;
+            }
             const newSet = {
               setNumber: set.setNumber,
               name: set.name,
@@ -479,6 +487,10 @@ export default function App() {
 
           // Import sold sets with image hashes
           for (const soldSet of data.soldSets || []) {
+            if (!soldSet.photo || !data.imageCache[soldSet.photo]) {
+              console.error("Missing photo data for soldSet:", soldSet);
+              continue;
+            }
             const newSoldSet = {
               setNumber: soldSet.setNumber,
               name: soldSet.name,
@@ -491,8 +503,14 @@ export default function App() {
             await addDoc(soldSetsCollection, newSoldSet);
           }
         } else {
+          console.log("Detected new format without imageCache");
+
           // Import sets with base64 image data
           for (const set of data.sets || []) {
+            if (!set.photo) {
+              console.error("Missing photo data for set:", set);
+              continue;
+            }
             const newSet = {
               setNumber: set.setNumber,
               name: set.name,
@@ -506,6 +524,10 @@ export default function App() {
 
           // Import sold sets with base64 image data
           for (const soldSet of data.soldSets || []) {
+            if (!soldSet.photo) {
+              console.error("Missing photo data for soldSet:", soldSet);
+              continue;
+            }
             const newSoldSet = {
               setNumber: soldSet.setNumber,
               name: soldSet.name,
@@ -524,12 +546,13 @@ export default function App() {
         alert("Data imported successfully!");
       } catch (error) {
         console.error("Error importing data:", error);
-        alert("Error importing data. Please check the file format.");
+        alert(`Error importing data. Details: ${error.message}. Please check the file format and console for more information.`);
       }
     };
     reader.readAsText(file);
   }
 };
+
 
   const calculateStats = () => {
     const totalBuyPrice = soldSets.reduce((sum, set) => sum + set.buyPrice, 0);
