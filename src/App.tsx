@@ -459,19 +459,44 @@ export default function App() {
           await deleteDoc(doc.ref);
         });
 
-        // Add imported data
-        for (const set of data.sets || []) {
-          await addDoc(setsCollection, set);
+        // Restore the image cache from the old JSON file
+        if (data.imageCache) {
+          setImageCache(data.imageCache);
         }
+
+        // Add imported sets
+        for (const set of data.sets || []) {
+          const newSet = {
+            setNumber: set.setNumber,
+            name: set.name,
+            buyPrice: set.buyPrice,
+            photo: set.photo, // This is the image hash from the old system
+            sellPrice: set.sellPrice,
+            location: set.location,
+          };
+          await addDoc(setsCollection, newSet);
+        }
+
+        // Add imported sold sets
         for (const soldSet of data.soldSets || []) {
-          await addDoc(soldSetsCollection, soldSet);
+          const newSoldSet = {
+            setNumber: soldSet.setNumber,
+            name: soldSet.name,
+            buyPrice: soldSet.buyPrice,
+            photo: soldSet.photo, // This is the image hash from the old system
+            sellPrice: soldSet.sellPrice,
+            location: soldSet.location,
+            soldDate: soldSet.soldDate,
+          };
+          await addDoc(soldSetsCollection, newSoldSet);
         }
 
         fetchSets();
         fetchSoldSets();
         alert("Data imported successfully!");
       } catch (error) {
-        alert("Error importing data. Please check the file.");
+        console.error("Error importing data:", error);
+        alert("Error importing data. Please check the file format.");
       }
     };
     reader.readAsText(file);
