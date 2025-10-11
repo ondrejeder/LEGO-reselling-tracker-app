@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { Plus, Download, Upload, X, Save } from "lucide-react";
+import { Plus, Download, Upload, X, Save, Edit2 } from "lucide-react";
 
 interface LegoSet {
   id: number;
+  setNumber: string;
   name: string;
   buyPrice: number;
   photo: string;
@@ -12,6 +13,7 @@ interface LegoSet {
 }
 
 interface FormData {
+  setNumber: string;
   name: string;
   buyPrice: string;
   quantity: number;
@@ -29,16 +31,47 @@ export default function App() {
   const [editingSet, setEditingSet] = useState<LegoSet | null>(null);
   const [editingSoldSet, setEditingSoldSet] = useState<LegoSet | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [soldSearchQuery, setSoldSearchQuery] = useState<string>("");
   const [sortBy, setSortBy] = useState<
-    "default" | "name-asc" | "name-desc" | "price-asc" | "price-desc"
+    "default" | "number-asc" | "number-desc" | "price-asc" | "price-desc"
   >("default");
+  const [soldSortBy, setSoldSortBy] = useState<
+    "date" | "profit-asc" | "profit-desc" | "profit-pct-asc" | "profit-pct-desc"
+  >("date");
+  const [imageCache, setImageCache] = useState<{ [hash: string]: string }>({});
   const [formData, setFormData] = useState<FormData>({
+    setNumber: "",
     name: "",
     buyPrice: "",
     quantity: 1,
     photo: null,
     location: "Doma",
   });
+
+  // Generate hash for image deduplication
+  const hashImage = (imageData: string): string => {
+    let hash = 0;
+    for (let i = 0; i < Math.min(imageData.length, 1000); i++) {
+      const char = imageData.charCodeAt(i);
+      hash = (hash << 5) - hash + char;
+      hash = hash & hash;
+    }
+    return hash.toString(36);
+  };
+
+  // Store image in cache and return hash
+  const cacheImage = (imageData: string): string => {
+    const hash = hashImage(imageData);
+    if (!imageCache[hash]) {
+      setImageCache((prev) => ({ ...prev, [hash]: imageData }));
+    }
+    return hash;
+  };
+
+  // Get image from cache by hash
+  const getImageFromCache = (hash: string): string => {
+    return imageCache[hash] || hash; // fallback to hash if not found (for old data)
+  };
 
   // Compress and convert image to base64
   const compressImage = (file: File): Promise<string> => {
@@ -83,12 +116,18 @@ export default function App() {
     const file = e.target.files?.[0];
     if (file) {
       const compressed = await compressImage(file);
-      setFormData({ ...formData, photo: compressed });
+      const imageHash = cacheImage(compressed);
+      setFormData({ ...formData, photo: imageHash });
     }
   };
 
   const handleAddSet = () => {
-    if (!formData.name || !formData.buyPrice || !formData.photo) {
+    if (
+      !formData.setNumber ||
+      !formData.name ||
+      !formData.buyPrice ||
+      !formData.photo
+    ) {
       alert("Please fill in all fields and upload a photo");
       return;
     }
@@ -97,6 +136,7 @@ export default function App() {
     for (let i = 0; i < parseInt(String(formData.quantity)); i++) {
       newSets.push({
         id: Date.now() + i,
+        setNumber: formData.setNumber,
         name: formData.name,
         buyPrice: parseFloat(formData.buyPrice),
         photo: formData.photo,
@@ -107,6 +147,7 @@ export default function App() {
 
     setSets([...sets, ...newSets]);
     setFormData({
+      setNumber: "",
       name: "",
       buyPrice: "",
       quantity: 1,
@@ -155,6 +196,20 @@ export default function App() {
     }
   };
 
+  const handleDuplicateSet = () => {
+    if (!editingSet) return;
+
+    const duplicated: LegoSet = {
+      ...editingSet,
+      id: Date.now(),
+      sellPrice: null,
+    };
+    setSets([...sets, duplicated]);
+    setShowEditModal(false);
+    setEditingSet(null);
+    alert("Set duplicated successfully!");
+  };
+
   const handleEditSoldSet = (set: LegoSet) => {
     setEditingSoldSet(set);
     setShowSoldEditModal(true);
@@ -170,11 +225,57 @@ export default function App() {
     }
   };
 
-  const handleSort = (type: "name" | "price") => {
-    if (type === "name") {
-      if (sortBy === "name-asc") setSortBy("name-desc");
-      else if (sortBy === "name-desc") setSortBy("default");
-      else setSortBy("name-asc");
+  const handleSoldSort = (type: "profit" | "profit-pct") => {
+    if (type === "profit") {
+      if (soldSortBy === "profit-asc") setSoldSortBy("profit-desc");
+      else if (soldSortBy === "profit-desc") setSoldSortBy("date");
+      else setSoldSortBy("profit-asc");
+    } else {
+      if (soldSortBy === "profit-pct-asc") setSoldSortBy("profit-pct-desc");
+      else if (soldSortBy === "profit-pct-desc") setSoldSortBy("date");
+      else setSoldSortBy("profit-pct-asc");
+    }
+  };
+
+  const getSortedAndFilteredSoldSets = () => {
+    let filtered = soldSets.filter(
+      (set) =>
+        set.name.toLowerCase().includes(soldSearchQuery.toLowerCase()) ||
+        set.setNumber.toLowerCase().includes(soldSearchQuery.toLowerCase())
+    );
+
+    return [...filtered].sort((a, b) => {
+      if (soldSortBy === "date") {
+        const dateA = new Date(a.soldDate || 0).getTime();
+        const dateB = new Date(b.soldDate || 0).getTime();
+        return dateB - dateA; // newest first
+      }
+
+      const profitA = (a.sellPrice || 0) - a.buyPrice;
+      const profitB = (b.sellPrice || 0) - b.buyPrice;
+
+      if (soldSortBy === "profit-asc") return profitA - profitB;
+      if (soldSortBy === "profit-desc") return profitB - profitA;
+
+      const profitPctA = a.sellPrice
+        ? ((a.sellPrice - a.buyPrice) / a.buyPrice) * 100
+        : 0;
+      const profitPctB = b.sellPrice
+        ? ((b.sellPrice - b.buyPrice) / b.buyPrice) * 100
+        : 0;
+
+      if (soldSortBy === "profit-pct-asc") return profitPctA - profitPctB;
+      if (soldSortBy === "profit-pct-desc") return profitPctB - profitPctA;
+
+      return 0;
+    });
+  };
+
+  const handleSort = (type: "number" | "price") => {
+    if (type === "number") {
+      if (sortBy === "number-asc") setSortBy("number-desc");
+      else if (sortBy === "number-desc") setSortBy("default");
+      else setSortBy("number-asc");
     } else {
       if (sortBy === "price-asc") setSortBy("price-desc");
       else if (sortBy === "price-desc") setSortBy("default");
@@ -183,15 +284,19 @@ export default function App() {
   };
 
   const getSortedAndFilteredSets = () => {
-    let filtered = sets.filter((set) =>
-      set.name.toLowerCase().includes(searchQuery.toLowerCase())
+    let filtered = sets.filter(
+      (set) =>
+        set.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        set.setNumber.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
     if (sortBy === "default") return filtered;
 
     return [...filtered].sort((a, b) => {
-      if (sortBy === "name-asc") return a.name.localeCompare(b.name);
-      if (sortBy === "name-desc") return b.name.localeCompare(a.name);
+      if (sortBy === "number-asc")
+        return a.setNumber.localeCompare(b.setNumber);
+      if (sortBy === "number-desc")
+        return b.setNumber.localeCompare(a.setNumber);
       if (sortBy === "price-asc") return a.buyPrice - b.buyPrice;
       if (sortBy === "price-desc") return b.buyPrice - a.buyPrice;
       return 0;
@@ -212,7 +317,8 @@ export default function App() {
     const file = e.target.files?.[0];
     if (file && editingSet) {
       const compressed = await compressImage(file);
-      setEditingSet({ ...editingSet, photo: compressed });
+      const imageHash = cacheImage(compressed);
+      setEditingSet({ ...editingSet, photo: imageHash });
     }
   };
 
@@ -221,6 +327,7 @@ export default function App() {
       const data = {
         sets,
         soldSets,
+        imageCache,
         exportDate: new Date().toISOString(),
       };
       const jsonString = JSON.stringify(data, null, 2);
@@ -228,7 +335,14 @@ export default function App() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `lego-tracker-${Date.now()}.json`;
+
+      // Format: lego-tracker-dd-mm-yyyy.json
+      const now = new Date();
+      const day = String(now.getDate()).padStart(2, "0");
+      const month = String(now.getMonth() + 1).padStart(2, "0");
+      const year = now.getFullYear();
+      a.download = `lego-tracker-${day}-${month}-${year}.json`;
+
       a.style.display = "none";
       document.body.appendChild(a);
       a.click();
@@ -243,6 +357,7 @@ export default function App() {
       const data = {
         sets,
         soldSets,
+        imageCache,
         exportDate: new Date().toISOString(),
       };
       const jsonString = JSON.stringify(data, null, 2);
@@ -271,9 +386,11 @@ export default function App() {
           // Force state update to trigger recalculation
           setSets([]);
           setSoldSets([]);
+          setImageCache({});
           setTimeout(() => {
             setSets(data.sets || []);
             setSoldSets(data.soldSets || []);
+            setImageCache(data.imageCache || {});
             alert("Data imported successfully!");
           }, 0);
         } catch (error) {
@@ -397,7 +514,7 @@ export default function App() {
                   <div className="relative flex-1 max-w-md">
                     <input
                       type="text"
-                      placeholder="Search by name..."
+                      placeholder="Search by name or number..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="w-full border rounded px-3 py-2 pr-10"
@@ -415,17 +532,17 @@ export default function App() {
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-gray-600">Sort by:</span>
                     <button
-                      onClick={() => handleSort("name")}
+                      onClick={() => handleSort("number")}
                       className={`px-3 py-1 text-sm rounded border ${
-                        sortBy.startsWith("name")
+                        sortBy.startsWith("number")
                           ? "bg-blue-500 text-white border-blue-500"
                           : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
                       }`}
                     >
-                      Set Name{" "}
-                      {sortBy === "name-asc"
+                      Set Number{" "}
+                      {sortBy === "number-asc"
                         ? "↑"
-                        : sortBy === "name-desc"
+                        : sortBy === "number-desc"
                         ? "↓"
                         : ""}
                     </button>
@@ -450,21 +567,32 @@ export default function App() {
                   {getSortedAndFilteredSets().map((set) => (
                     <div
                       key={set.id}
-                      onClick={() => handleEditSet(set)}
-                      className="bg-white border rounded-lg p-4 cursor-pointer hover:shadow-lg transition"
+                      className="bg-white border rounded-lg p-4 hover:shadow-lg transition relative"
                     >
                       <img
-                        src={set.photo}
+                        src={getImageFromCache(set.photo)}
                         alt={set.name}
                         className="w-full h-48 object-cover rounded mb-3"
                       />
-                      <h3 className="font-semibold text-lg mb-2">{set.name}</h3>
+                      <h3 className="font-semibold text-lg mb-2">
+                        {set.name} {set.setNumber}
+                      </h3>
                       <p className="text-gray-600">
                         Buy Price: {Math.round(set.buyPrice)} CZK
                       </p>
                       <p className="text-sm text-gray-500 mt-1">
                         Location: {set.location}
                       </p>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEditSet(set);
+                        }}
+                        className="absolute bottom-4 right-4 p-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 shadow-md"
+                        type="button"
+                      >
+                        <Edit2 size={18} />
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -479,52 +607,114 @@ export default function App() {
             )}
 
             {activeTab === "sold" && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {soldSets.map((set) => {
-                  const profitPercent = set.sellPrice
-                    ? ((set.sellPrice - set.buyPrice) / set.buyPrice) * 100
-                    : 0;
-                  const profitAmount = (set.sellPrice || 0) - set.buyPrice;
-                  return (
-                    <div
-                      key={set.id}
-                      onClick={() => handleEditSoldSet(set)}
-                      className="bg-white border rounded-lg p-4 cursor-pointer hover:shadow-lg transition"
-                    >
-                      <img
-                        src={set.photo}
-                        alt={set.name}
-                        className="w-full h-48 object-cover rounded mb-3"
-                      />
-                      <h3 className="font-semibold text-lg mb-2">{set.name}</h3>
-                      <p className="text-gray-600">
-                        Buy Price: {Math.round(set.buyPrice)} CZK
-                      </p>
-                      <p className="text-green-600">
-                        Sell Price: {Math.round(set.sellPrice || 0)} CZK
-                      </p>
-                      <p
-                        className={`font-semibold ${
-                          profitAmount >= 0 ? "text-green-600" : "text-red-600"
-                        }`}
+              <div>
+                <div className="mb-4 flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+                  <div className="relative flex-1 max-w-md">
+                    <input
+                      type="text"
+                      placeholder="Search by name or number..."
+                      value={soldSearchQuery}
+                      onChange={(e) => setSoldSearchQuery(e.target.value)}
+                      className="w-full border rounded px-3 py-2 pr-10"
+                    />
+                    {soldSearchQuery && (
+                      <button
+                        onClick={() => setSoldSearchQuery("")}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
                       >
-                        Profit: {Math.round(profitAmount)} CZK (
-                        {profitPercent >= 0 ? "+" : ""}
-                        {profitPercent.toFixed(1)}%)
-                      </p>
-                      {set.soldDate && (
-                        <p className="text-xs text-gray-400 mt-2">
-                          Sold on: {formatDate(set.soldDate)}
+                        <X size={20} />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-600">Sort by:</span>
+                    <button
+                      onClick={() => handleSoldSort("profit")}
+                      className={`px-3 py-1 text-sm rounded border ${
+                        soldSortBy.startsWith("profit") &&
+                        !soldSortBy.includes("pct")
+                          ? "bg-blue-500 text-white border-blue-500"
+                          : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+                      }`}
+                    >
+                      Profit{" "}
+                      {soldSortBy === "profit-asc"
+                        ? "↑"
+                        : soldSortBy === "profit-desc"
+                        ? "↓"
+                        : ""}
+                    </button>
+                    <button
+                      onClick={() => handleSoldSort("profit-pct")}
+                      className={`px-3 py-1 text-sm rounded border ${
+                        soldSortBy.includes("pct")
+                          ? "bg-blue-500 text-white border-blue-500"
+                          : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+                      }`}
+                    >
+                      Profit %{" "}
+                      {soldSortBy === "profit-pct-asc"
+                        ? "↑"
+                        : soldSortBy === "profit-pct-desc"
+                        ? "↓"
+                        : ""}
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {getSortedAndFilteredSoldSets().map((set) => {
+                    const profitPercent = set.sellPrice
+                      ? ((set.sellPrice - set.buyPrice) / set.buyPrice) * 100
+                      : 0;
+                    const profitAmount = (set.sellPrice || 0) - set.buyPrice;
+                    return (
+                      <div
+                        key={set.id}
+                        onClick={() => handleEditSoldSet(set)}
+                        className="bg-white border rounded-lg p-4 cursor-pointer hover:shadow-lg transition"
+                      >
+                        <img
+                          src={getImageFromCache(set.photo)}
+                          alt={set.name}
+                          className="w-full h-48 object-cover rounded mb-3"
+                        />
+                        <h3 className="font-semibold text-lg mb-2">
+                          {set.name} {set.setNumber}
+                        </h3>
+                        <p className="text-gray-600">
+                          Buy Price: {Math.round(set.buyPrice)} CZK
                         </p>
-                      )}
-                    </div>
-                  );
-                })}
-                {soldSets.length === 0 && (
-                  <p className="col-span-full text-center text-gray-500 py-8">
-                    No sold sets yet.
-                  </p>
-                )}
+                        <p className="text-green-600">
+                          Sell Price: {Math.round(set.sellPrice || 0)} CZK
+                        </p>
+                        <p
+                          className={`font-semibold ${
+                            profitAmount >= 0
+                              ? "text-green-600"
+                              : "text-red-600"
+                          }`}
+                        >
+                          Profit: {Math.round(profitAmount)} CZK (
+                          {profitPercent >= 0 ? "+" : ""}
+                          {profitPercent.toFixed(1)}%)
+                        </p>
+                        {set.soldDate && (
+                          <p className="text-xs text-gray-400 mt-2">
+                            Sold on: {formatDate(set.soldDate)}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {getSortedAndFilteredSoldSets().length === 0 && (
+                    <p className="col-span-full text-center text-gray-500 py-8">
+                      {soldSearchQuery
+                        ? "No sold sets found matching your search."
+                        : "No sold sets yet."}
+                    </p>
+                  )}
+                </div>
               </div>
             )}
 
@@ -608,13 +798,15 @@ export default function App() {
             <div className="space-y-4">
               <div>
                 <img
-                  src={editingSoldSet.photo}
+                  src={getImageFromCache(editingSoldSet.photo)}
                   alt={editingSoldSet.name}
                   className="w-full h-32 object-cover rounded"
                 />
               </div>
               <div>
-                <h3 className="font-semibold text-lg">{editingSoldSet.name}</h3>
+                <h3 className="font-semibold text-lg">
+                  {editingSoldSet.name} {editingSoldSet.setNumber}
+                </h3>
                 <p className="text-sm text-gray-600">
                   Buy Price: {Math.round(editingSoldSet.buyPrice)} CZK
                 </p>
@@ -636,12 +828,34 @@ export default function App() {
                   className="w-full border rounded px-3 py-2"
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  Sold Date
+                </label>
+                <input
+                  type="date"
+                  value={
+                    editingSoldSet.soldDate
+                      ? editingSoldSet.soldDate.split("T")[0]
+                      : ""
+                  }
+                  onChange={(e) =>
+                    setEditingSoldSet({
+                      ...editingSoldSet,
+                      soldDate: e.target.value
+                        ? new Date(e.target.value).toISOString()
+                        : undefined,
+                    })
+                  }
+                  className="w-full border rounded px-3 py-2"
+                />
+              </div>
               <button
                 onClick={handleUpdateSoldSet}
                 className="w-full flex items-center justify-center gap-2 bg-blue-500 text-white py-2 rounded hover:bg-blue-600"
               >
                 <Save size={20} />
-                Update Sell Price
+                Update
               </button>
             </div>
           </div>
@@ -659,6 +873,19 @@ export default function App() {
               </button>
             </div>
             <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  Set Number
+                </label>
+                <input
+                  type="text"
+                  value={formData.setNumber}
+                  onChange={(e) =>
+                    setFormData({ ...formData, setNumber: e.target.value })
+                  }
+                  className="w-full border rounded px-3 py-2"
+                />
+              </div>
               <div>
                 <label className="block text-sm font-medium mb-1">
                   Set Name
@@ -731,7 +958,7 @@ export default function App() {
                 />
                 {formData.photo && (
                   <img
-                    src={formData.photo}
+                    src={getImageFromCache(formData.photo)}
                     alt="Preview"
                     className="mt-2 w-full h-32 object-cover rounded"
                   />
@@ -759,6 +986,19 @@ export default function App() {
               </button>
             </div>
             <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  Set Number
+                </label>
+                <input
+                  type="text"
+                  value={editingSet.setNumber}
+                  onChange={(e) =>
+                    setEditingSet({ ...editingSet, setNumber: e.target.value })
+                  }
+                  className="w-full border rounded px-3 py-2"
+                />
+              </div>
               <div>
                 <label className="block text-sm font-medium mb-1">
                   Set Name
@@ -834,7 +1074,7 @@ export default function App() {
                 />
                 {editingSet.photo && (
                   <img
-                    src={editingSet.photo}
+                    src={getImageFromCache(editingSet.photo)}
                     alt="Preview"
                     className="mt-2 w-full h-32 object-cover rounded"
                   />
@@ -855,13 +1095,21 @@ export default function App() {
                   Mark as Sold
                 </button>
               </div>
-              <button
-                onClick={handleDeleteSet}
-                className="w-full bg-red-500 text-white py-2 rounded hover:bg-red-600 flex items-center justify-center gap-2"
-              >
-                <X size={20} />
-                Delete Item
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleDuplicateSet}
+                  className="flex-1 bg-purple-500 text-white py-2 rounded hover:bg-purple-600"
+                >
+                  Duplicate
+                </button>
+                <button
+                  onClick={handleDeleteSet}
+                  className="flex-1 bg-red-500 text-white py-2 rounded hover:bg-red-600 flex items-center justify-center gap-2"
+                >
+                  <X size={20} />
+                  Delete
+                </button>
+              </div>
             </div>
           </div>
         </div>
