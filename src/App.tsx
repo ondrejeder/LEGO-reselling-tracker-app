@@ -464,25 +464,6 @@ export default function App() {
           <div className="p-6 border-b">
             <div className="flex justify-between items-center">
               <h1 className="text-3xl font-bold text-gray-800">Brick Invest</h1>
-              <div className="flex gap-2">
-                <button
-                  onClick={exportData}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-                >
-                  <Download size={20} />
-                  Export
-                </button>
-                <label className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 cursor-pointer">
-                  <Upload size={20} />
-                  Import
-                  <input
-                    type="file"
-                    accept=".json"
-                    onChange={importData}
-                    className="hidden"
-                  />
-                </label>
-              </div>
             </div>
           </div>
 
@@ -810,6 +791,26 @@ export default function App() {
                     </div>
                   </div>
                 </div>
+
+                <div className="flex gap-2 mt-6 justify-center">
+                  <button
+                    onClick={exportData}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                  >
+                    <Download size={20} />
+                    Export
+                  </button>
+                  <label className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 cursor-pointer">
+                    <Upload size={20} />
+                    Import
+                    <input
+                      type="file"
+                      accept=".json"
+                      onChange={importData}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
               </div>
             )}
           </div>
@@ -902,8 +903,8 @@ export default function App() {
 
       {/* Add Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-2xl font-bold">Add New Set</h2>
               <button onClick={() => setShowAddModal(false)}>
@@ -988,17 +989,30 @@ export default function App() {
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">Photo</label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handlePhotoUpload}
-                  className="w-full border rounded px-3 py-2"
-                />
-                {formData.photo && (
-                  <img
-                    src={getImageFromCache(formData.photo)}
-                    alt="Preview"
-                    className="mt-2 w-full h-32 object-cover rounded"
+                {formData.photo ? (
+                  <div className="relative">
+                    <img
+                      src={getImageFromCache(formData.photo)}
+                      alt="Preview"
+                      className="w-full h-48 object-cover rounded cursor-pointer"
+                      onClick={() =>
+                        document.getElementById("add-photo-input")?.click()
+                      }
+                    />
+                    <input
+                      id="add-photo-input"
+                      type="file"
+                      accept="image/*"
+                      onChange={handlePhotoUpload}
+                      className="hidden"
+                    />
+                  </div>
+                ) : (
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handlePhotoUpload}
+                    className="w-full border rounded px-3 py-2"
                   />
                 )}
               </div>
@@ -1015,8 +1029,8 @@ export default function App() {
 
       {/* Edit Modal */}
       {showEditModal && editingSet && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-2xl font-bold">Edit Set</h2>
               <button onClick={() => setShowEditModal(false)}>
@@ -1104,19 +1118,23 @@ export default function App() {
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">Photo</label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleEditPhotoUpload}
-                  className="w-full border rounded px-3 py-2"
-                />
-                {editingSet.photo && (
+                <div className="relative">
                   <img
                     src={getImageFromCache(editingSet.photo)}
                     alt="Preview"
-                    className="mt-2 w-full h-32 object-cover rounded"
+                    className="w-full h-48 object-cover rounded cursor-pointer"
+                    onClick={() =>
+                      document.getElementById("edit-photo-input")?.click()
+                    }
                   />
-                )}
+                  <input
+                    id="edit-photo-input"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleEditPhotoUpload}
+                    className="hidden"
+                  />
+                </div>
               </div>
               <div className="flex gap-2">
                 <button
