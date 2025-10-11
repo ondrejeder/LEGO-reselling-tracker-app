@@ -459,36 +459,64 @@ export default function App() {
           await deleteDoc(doc.ref);
         });
 
-        // Restore the image cache from the old JSON file
+        // Check if the JSON file is in the old format (with imageCache)
         if (data.imageCache) {
+          // Restore the image cache
           setImageCache(data.imageCache);
-        }
 
-        // Add imported sets
-        for (const set of data.sets || []) {
-          const newSet = {
-            setNumber: set.setNumber,
-            name: set.name,
-            buyPrice: set.buyPrice,
-            photo: set.photo, // This is the image hash from the old system
-            sellPrice: set.sellPrice,
-            location: set.location,
-          };
-          await addDoc(setsCollection, newSet);
-        }
+          // Import sets with image hashes
+          for (const set of data.sets || []) {
+            const newSet = {
+              setNumber: set.setNumber,
+              name: set.name,
+              buyPrice: set.buyPrice,
+              photo: set.photo, // This is the image hash
+              sellPrice: set.sellPrice,
+              location: set.location,
+            };
+            await addDoc(setsCollection, newSet);
+          }
 
-        // Add imported sold sets
-        for (const soldSet of data.soldSets || []) {
-          const newSoldSet = {
-            setNumber: soldSet.setNumber,
-            name: soldSet.name,
-            buyPrice: soldSet.buyPrice,
-            photo: soldSet.photo, // This is the image hash from the old system
-            sellPrice: soldSet.sellPrice,
-            location: soldSet.location,
-            soldDate: soldSet.soldDate,
-          };
-          await addDoc(soldSetsCollection, newSoldSet);
+          // Import sold sets with image hashes
+          for (const soldSet of data.soldSets || []) {
+            const newSoldSet = {
+              setNumber: soldSet.setNumber,
+              name: soldSet.name,
+              buyPrice: soldSet.buyPrice,
+              photo: soldSet.photo, // This is the image hash
+              sellPrice: soldSet.sellPrice,
+              location: soldSet.location,
+              soldDate: soldSet.soldDate,
+            };
+            await addDoc(soldSetsCollection, newSoldSet);
+          }
+        } else {
+          // Import sets with base64 image data
+          for (const set of data.sets || []) {
+            const newSet = {
+              setNumber: set.setNumber,
+              name: set.name,
+              buyPrice: set.buyPrice,
+              photo: set.photo, // This is the base64 image data
+              sellPrice: set.sellPrice,
+              location: set.location,
+            };
+            await addDoc(setsCollection, newSet);
+          }
+
+          // Import sold sets with base64 image data
+          for (const soldSet of data.soldSets || []) {
+            const newSoldSet = {
+              setNumber: soldSet.setNumber,
+              name: soldSet.name,
+              buyPrice: soldSet.buyPrice,
+              photo: soldSet.photo, // This is the base64 image data
+              sellPrice: soldSet.sellPrice,
+              location: soldSet.location,
+              soldDate: soldSet.soldDate,
+            };
+            await addDoc(soldSetsCollection, newSoldSet);
+          }
         }
 
         fetchSets();
