@@ -159,13 +159,12 @@ export default function App() {
   };
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const compressed = await compressImage(file);
-      const imageHash = cacheImage(compressed);
-      setFormData({ ...formData, photo: imageHash });
-    }
-  };
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  const compressedImage = await compressImage(file);
+  setFormData({ ...formData, photo: compressedImage });
+};
 
   const handleAddSet = async () => {
   if (
@@ -184,7 +183,7 @@ export default function App() {
       setNumber: formData.setNumber,
       name: formData.name,
       buyPrice: parseFloat(formData.buyPrice),
-      photo: formData.photo,
+      photo: formData.photo, // This is the compressed base64 string
       sellPrice: null,
       location: formData.location,
     });
@@ -212,13 +211,14 @@ export default function App() {
   };
 
   const handleUpdateSet = async () => {
-  if (editingSet) {
-    const setRef = doc(db, "sets", editingSet.id);
-    await updateDoc(setRef, { ...editingSet });
-    fetchSets();
-    setShowEditModal(false);
-    setEditingSet(null);
-  }
+  if (!editingSet) return;
+
+  const setRef = doc(db, "sets", editingSet.id);
+  await updateDoc(setRef, { ...editingSet }); // This includes the compressed base64 string
+
+  fetchSets();
+  setShowEditModal(false);
+  setEditingSet(null);
 };
 
   const handleMarkAsSold = async () => {
@@ -380,70 +380,62 @@ export default function App() {
     return `${day}/${month}/${year}`;
   };
 
-  const handleEditPhotoUpload = async (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const file = e.target.files?.[0];
-    if (file && editingSet) {
-      const compressed = await compressImage(file);
-      const imageHash = cacheImage(compressed);
-      setEditingSet({ ...editingSet, photo: imageHash });
-    }
-  };
+  const handleEditPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const file = e.target.files?.[0];
+  if (!file || !editingSet) return;
+
+  const compressedImage = await compressImage(file);
+  setEditingSet({ ...editingSet, photo: compressedImage });
+};
 
   const exportData = () => {
-    try {
-      const data = {
-        sets,
-        soldSets,
-        imageCache,
-        exportDate: new Date().toISOString(),
-      };
-      const jsonString = JSON.stringify(data, null, 2);
-      const blob = new Blob([jsonString], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
+  try {
+    const data = {
+      sets,
+      soldSets,
+      exportDate: new Date().toISOString(),
+    };
+    const jsonString = JSON.stringify(data, null, 2);
+    const blob = new Blob([jsonString], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
 
-      // Format: lego-tracker-dd-mm-yyyy.json
-      const now = new Date();
-      const day = String(now.getDate()).padStart(2, "0");
-      const month = String(now.getMonth() + 1).padStart(2, "0");
-      const year = now.getFullYear();
-      a.download = `lego-tracker-${day}-${month}-${year}.json`;
+    const now = new Date();
+    const day = String(now.getDate()).padStart(2, "0");
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const year = now.getFullYear();
+    a.download = `lego-tracker-${day}-${month}-${year}.json`;
 
-      a.style.display = "none";
-      document.body.appendChild(a);
-      a.click();
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
 
-      // Cleanup
-      setTimeout(() => {
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      }, 100);
-    } catch (error) {
-      // Fallback: copy to clipboard if download fails
-      const data = {
-        sets,
-        soldSets,
-        imageCache,
-        exportDate: new Date().toISOString(),
-      };
-      const jsonString = JSON.stringify(data, null, 2);
-      navigator.clipboard
-        .writeText(jsonString)
-        .then(() => {
-          alert(
-            "Export download blocked! Data has been copied to your clipboard instead. Paste it into a text file and save as .json"
-          );
-        })
-        .catch(() => {
-          alert(
-            "Export failed. Please try again or use the deployed version on Vercel."
-          );
-        });
-    }
-  };
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 100);
+  } catch (error) {
+    const data = {
+      sets,
+      soldSets,
+      exportDate: new Date().toISOString(),
+    };
+    const jsonString = JSON.stringify(data, null, 2);
+    navigator.clipboard
+      .writeText(jsonString)
+      .then(() => {
+        alert(
+          "Export download blocked! Data has been copied to your clipboard instead. Paste it into a text file and save as .json"
+        );
+      })
+      .catch(() => {
+        alert(
+          "Export failed. Please try again or use the deployed version on Vercel."
+        );
+      });
+  }
+};
 
   const importData = (e: React.ChangeEvent<HTMLInputElement>) => {
   const file = e.target.files?.[0];
@@ -452,6 +444,7 @@ export default function App() {
     reader.onload = async (event) => {
       try {
         const data = JSON.parse(event.target?.result as string);
+
         // Clear existing data
         const setsCollection = collection(db, "sets");
         const soldSetsCollection = collection(db, "soldSets");
@@ -474,7 +467,6 @@ export default function App() {
           await addDoc(soldSetsCollection, soldSet);
         }
 
-        setImageCache(data.imageCache || {});
         fetchSets();
         fetchSoldSets();
         alert("Data imported successfully!");
