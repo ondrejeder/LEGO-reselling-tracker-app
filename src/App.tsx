@@ -1,5 +1,15 @@
 import { useState } from "react";
-import { Plus, Download, Upload, X, Save, Edit2 } from "lucide-react";
+import {
+  Plus,
+  Download,
+  Upload,
+  X,
+  Save,
+  Edit2,
+  DollarSign,
+  Copy,
+  Trash2,
+} from "lucide-react";
 
 interface LegoSet {
   id: number;
@@ -193,6 +203,20 @@ export default function App() {
       setSets(sets.filter((s) => s.id !== editingSet.id));
       setShowEditModal(false);
       setEditingSet(null);
+    }
+  };
+
+  const handleDeleteSoldSet = () => {
+    if (!editingSoldSet) return;
+
+    if (
+      window.confirm(
+        `Are you sure you want to delete "${editingSoldSet.name}"? This action cannot be undone.`
+      )
+    ) {
+      setSoldSets(soldSets.filter((s) => s.id !== editingSoldSet.id));
+      setShowSoldEditModal(false);
+      setEditingSoldSet(null);
     }
   };
 
@@ -439,9 +463,7 @@ export default function App() {
           {/* Header */}
           <div className="p-6 border-b">
             <div className="flex justify-between items-center">
-              <h1 className="text-3xl font-bold text-gray-800">
-                LEGO Reselling Tracker
-              </h1>
+              <h1 className="text-3xl font-bold text-gray-800">Brick Invest</h1>
               <div className="flex gap-2">
                 <button
                   onClick={exportData}
@@ -494,7 +516,7 @@ export default function App() {
                   : "text-gray-500 hover:text-gray-700"
               }`}
             >
-              Statistics
+              Stats
             </button>
           </div>
 
@@ -671,8 +693,7 @@ export default function App() {
                     return (
                       <div
                         key={set.id}
-                        onClick={() => handleEditSoldSet(set)}
-                        className="bg-white border rounded-lg p-4 cursor-pointer hover:shadow-lg transition"
+                        className="bg-white border rounded-lg p-4 hover:shadow-lg transition relative"
                       >
                         <img
                           src={getImageFromCache(set.photo)}
@@ -704,6 +725,16 @@ export default function App() {
                             Sold on: {formatDate(set.soldDate)}
                           </p>
                         )}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditSoldSet(set);
+                          }}
+                          className="absolute bottom-4 right-4 p-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 shadow-md"
+                          type="button"
+                        >
+                          <Edit2 size={18} />
+                        </button>
                       </div>
                     );
                   })}
@@ -856,6 +887,13 @@ export default function App() {
               >
                 <Save size={20} />
                 Update
+              </button>
+              <button
+                onClick={handleDeleteSoldSet}
+                className="w-full flex items-center justify-center gap-2 bg-red-500 text-white py-2 rounded hover:bg-red-600"
+              >
+                <Trash2 size={20} />
+                Delete
               </button>
             </div>
           </div>
@@ -1090,23 +1128,25 @@ export default function App() {
                 </button>
                 <button
                   onClick={handleMarkAsSold}
-                  className="flex-1 bg-green-500 text-white py-2 rounded hover:bg-green-600"
+                  className="flex-1 flex items-center justify-center gap-2 bg-green-500 text-white py-2 rounded hover:bg-green-600"
                 >
+                  <DollarSign size={20} />
                   Mark as Sold
                 </button>
               </div>
               <div className="flex gap-2">
                 <button
                   onClick={handleDuplicateSet}
-                  className="flex-1 bg-purple-500 text-white py-2 rounded hover:bg-purple-600"
+                  className="flex-1 flex items-center justify-center gap-2 bg-purple-500 text-white py-2 rounded hover:bg-purple-600"
                 >
+                  <Copy size={20} />
                   Duplicate
                 </button>
                 <button
                   onClick={handleDeleteSet}
                   className="flex-1 bg-red-500 text-white py-2 rounded hover:bg-red-600 flex items-center justify-center gap-2"
                 >
-                  <X size={20} />
+                  <Trash2 size={20} />
                   Delete
                 </button>
               </div>
