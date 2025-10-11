@@ -4,12 +4,12 @@ import { getStorage } from "firebase/storage";
 
 // Replace with your Firebase config
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_AUTH_DOMAIN",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_STORAGE_BUCKET",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID",
+  apiKey: "AIzaSyDj3t-XA2zfKtxFpJker3km5lzVmR6GYgo",
+  authDomain: "brick-invest-online.firebaseapp.com",
+  projectId: "brick-invest-online",
+  storageBucket: "brick-invest-online.firebaseapp.com",
+  messagingSenderId: "79460859159",
+  appId: "1:79460859159:web:cda5bd5f8ebf01f0e28b52",
 };
 
 // Initialize Firebase
