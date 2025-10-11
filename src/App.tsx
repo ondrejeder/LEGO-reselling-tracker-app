@@ -437,13 +437,31 @@ export default function App() {
   }
 };
 
-  const importData = (e: React.ChangeEvent<HTMLInputElement>) => {
+  interface LegoSet {
+  id?: string;
+  setNumber: string;
+  name: string;
+  buyPrice: number;
+  photo: string;
+  sellPrice: number | null;
+  location: "Doma" | "Kolej";
+  soldDate?: string;
+}
+
+interface ImportData {
+  sets?: LegoSet[];
+  soldSets?: LegoSet[];
+  imageCache?: { [key: string]: string };
+}
+
+const importData = (e: React.ChangeEvent<HTMLInputElement>) => {
   const file = e.target.files?.[0];
   if (file) {
     const reader = new FileReader();
     reader.onload = async (event) => {
       try {
-        const data = JSON.parse(event.target?.result as string);
+        const content = event.target?.result as string;
+        const data: ImportData = JSON.parse(content);
         console.log("Importing data:", data);
 
         // Clear existing data
@@ -469,75 +487,83 @@ export default function App() {
           setImageCache(data.imageCache);
 
           // Import sets with image hashes
-          for (const set of data.sets || []) {
-            if (!set.photo || !data.imageCache[set.photo]) {
-              console.error("Missing photo data for set:", set);
-              continue;
+          if (data.sets) {
+            for (const set of data.sets) {
+              if (!set.photo || !data.imageCache[set.photo]) {
+                console.error("Missing photo data for set:", set);
+                continue;
+              }
+              const newSet = {
+                setNumber: set.setNumber,
+                name: set.name,
+                buyPrice: set.buyPrice,
+                photo: set.photo, // This is the image hash
+                sellPrice: set.sellPrice,
+                location: set.location,
+              };
+              await addDoc(setsCollection, newSet);
             }
-            const newSet = {
-              setNumber: set.setNumber,
-              name: set.name,
-              buyPrice: set.buyPrice,
-              photo: set.photo, // This is the image hash
-              sellPrice: set.sellPrice,
-              location: set.location,
-            };
-            await addDoc(setsCollection, newSet);
           }
 
           // Import sold sets with image hashes
-          for (const soldSet of data.soldSets || []) {
-            if (!soldSet.photo || !data.imageCache[soldSet.photo]) {
-              console.error("Missing photo data for soldSet:", soldSet);
-              continue;
+          if (data.soldSets) {
+            for (const soldSet of data.soldSets) {
+              if (!soldSet.photo || !data.imageCache[soldSet.photo]) {
+                console.error("Missing photo data for soldSet:", soldSet);
+                continue;
+              }
+              const newSoldSet = {
+                setNumber: soldSet.setNumber,
+                name: soldSet.name,
+                buyPrice: soldSet.buyPrice,
+                photo: soldSet.photo, // This is the image hash
+                sellPrice: soldSet.sellPrice,
+                location: soldSet.location,
+                soldDate: soldSet.soldDate,
+              };
+              await addDoc(soldSetsCollection, newSoldSet);
             }
-            const newSoldSet = {
-              setNumber: soldSet.setNumber,
-              name: soldSet.name,
-              buyPrice: soldSet.buyPrice,
-              photo: soldSet.photo, // This is the image hash
-              sellPrice: soldSet.sellPrice,
-              location: soldSet.location,
-              soldDate: soldSet.soldDate,
-            };
-            await addDoc(soldSetsCollection, newSoldSet);
           }
         } else {
           console.log("Detected new format without imageCache");
 
           // Import sets with base64 image data
-          for (const set of data.sets || []) {
-            if (!set.photo) {
-              console.error("Missing photo data for set:", set);
-              continue;
+          if (data.sets) {
+            for (const set of data.sets) {
+              if (!set.photo) {
+                console.error("Missing photo data for set:", set);
+                continue;
+              }
+              const newSet = {
+                setNumber: set.setNumber,
+                name: set.name,
+                buyPrice: set.buyPrice,
+                photo: set.photo, // This is the base64 image data
+                sellPrice: set.sellPrice,
+                location: set.location,
+              };
+              await addDoc(setsCollection, newSet);
             }
-            const newSet = {
-              setNumber: set.setNumber,
-              name: set.name,
-              buyPrice: set.buyPrice,
-              photo: set.photo, // This is the base64 image data
-              sellPrice: set.sellPrice,
-              location: set.location,
-            };
-            await addDoc(setsCollection, newSet);
           }
 
           // Import sold sets with base64 image data
-          for (const soldSet of data.soldSets || []) {
-            if (!soldSet.photo) {
-              console.error("Missing photo data for soldSet:", soldSet);
-              continue;
+          if (data.soldSets) {
+            for (const soldSet of data.soldSets) {
+              if (!soldSet.photo) {
+                console.error("Missing photo data for soldSet:", soldSet);
+                continue;
+              }
+              const newSoldSet = {
+                setNumber: soldSet.setNumber,
+                name: soldSet.name,
+                buyPrice: soldSet.buyPrice,
+                photo: soldSet.photo, // This is the base64 image data
+                sellPrice: soldSet.sellPrice,
+                location: soldSet.location,
+                soldDate: soldSet.soldDate,
+              };
+              await addDoc(soldSetsCollection, newSoldSet);
             }
-            const newSoldSet = {
-              setNumber: soldSet.setNumber,
-              name: soldSet.name,
-              buyPrice: soldSet.buyPrice,
-              photo: soldSet.photo, // This is the base64 image data
-              sellPrice: soldSet.sellPrice,
-              location: soldSet.location,
-              soldDate: soldSet.soldDate,
-            };
-            await addDoc(soldSetsCollection, newSoldSet);
           }
         }
 
@@ -546,12 +572,13 @@ export default function App() {
         alert("Data imported successfully!");
       } catch (error) {
         console.error("Error importing data:", error);
-        alert(`Error importing data. Details: ${error.message}. Please check the file format and console for more information.`);
+        alert(`Error importing data. Details: ${error instanceof Error ? error.message : String(error)}. Please check the file format and console for more information.`);
       }
     };
     reader.readAsText(file);
   }
 };
+
 
 
   const calculateStats = () => {
