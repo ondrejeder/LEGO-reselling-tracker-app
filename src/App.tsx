@@ -158,9 +158,14 @@ export default function App() {
       reader.onload = (event) => {
         try {
           const data = JSON.parse(event.target?.result as string);
-          setSets(data.sets || []);
-          setSoldSets(data.soldSets || []);
-          alert("Data imported successfully!");
+          // Force state update to trigger recalculation
+          setSets([]);
+          setSoldSets([]);
+          setTimeout(() => {
+            setSets(data.sets || []);
+            setSoldSets(data.soldSets || []);
+            alert("Data imported successfully!");
+          }, 0);
         } catch (error) {
           alert("Error importing data. Please check the file.");
         }
@@ -274,7 +279,7 @@ export default function App() {
                       />
                       <h3 className="font-semibold text-lg mb-2">{set.name}</h3>
                       <p className="text-gray-600">
-                        Buy Price: {set.buyPrice.toFixed(2)}CZK
+                        Buy Price: {set.buyPrice.toFixed(2)} CZK
                       </p>
                     </div>
                   ))}
@@ -298,14 +303,14 @@ export default function App() {
                     />
                     <h3 className="font-semibold text-lg mb-2">{set.name}</h3>
                     <p className="text-gray-600">
-                      Buy Price: {set.buyPrice.toFixed(2)}CZK
+                      Buy Price: {set.buyPrice.toFixed(2)} CZK
                     </p>
                     <p className="text-green-600">
-                      Sell Price: {set.sellPrice?.toFixed(2)}CZK
+                      Sell Price: {set.sellPrice?.toFixed(2)} CZK
                     </p>
                     <p className="text-blue-600 font-semibold">
-                      Profit: CZK
-                      {((set.sellPrice || 0) - set.buyPrice).toFixed(2)}
+                      Profit: {((set.sellPrice || 0) - set.buyPrice).toFixed(2)}{" "}
+                      CZK
                     </p>
                   </div>
                 ))}
@@ -327,13 +332,13 @@ export default function App() {
                         Total Buy Price (Sold Sets):
                       </span>
                       <span className="text-xl font-bold">
-                        {stats.totalBuyPrice.toFixed(2)}CZK
+                        {stats.totalBuyPrice.toFixed(2)} CZK
                       </span>
                     </div>
                     <div className="flex justify-between items-center p-4 bg-gray-50 rounded">
                       <span className="font-medium">Total Sell Price:</span>
                       <span className="text-xl font-bold">
-                        {stats.totalSellPrice.toFixed(2)}CZK
+                        {stats.totalSellPrice.toFixed(2)} CZK
                       </span>
                     </div>
                     <div className="flex justify-between items-center p-4 bg-green-50 rounded">
@@ -343,7 +348,7 @@ export default function App() {
                           stats.profit >= 0 ? "text-green-600" : "text-red-600"
                         }`}
                       >
-                        {stats.profit.toFixed(2)}CZK
+                        {stats.profit.toFixed(2)} CZK
                       </span>
                     </div>
                     <div className="flex justify-between items-center p-4 bg-blue-50 rounded">
@@ -472,7 +477,7 @@ export default function App() {
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">
-                  Buy Price (CZK)
+                  Buy Price ($)
                 </label>
                 <input
                   type="number"
@@ -489,7 +494,7 @@ export default function App() {
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">
-                  Sell Price (CZK)
+                  Sell Price ($)
                 </label>
                 <input
                   type="number"
