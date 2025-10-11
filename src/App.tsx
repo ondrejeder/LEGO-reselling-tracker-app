@@ -1,6 +1,4 @@
-import { useState } from "react";
-import firebase from "firebase/app";
-
+import { useState, useEffect } from "react";
 import {
   Plus,
   Download,
@@ -12,9 +10,19 @@ import {
   Copy,
   Trash2,
 } from "lucide-react";
+import {
+  collection,
+  addDoc,
+  getDocs,
+  updateDoc,
+  deleteDoc,
+  doc,
+} from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { db, storage } from "./firebase";
 
 interface LegoSet {
-  id: number;
+  id: string;
   setNumber: string;
   name: string;
   buyPrice: number;
@@ -59,6 +67,32 @@ export default function App() {
     photo: null,
     location: "Doma",
   });
+
+  // Fetch sets from Firestore
+  const fetchSets = async () => {
+    const querySnapshot = await getDocs(collection(db, "sets"));
+    const setsData: LegoSet[] = [];
+    querySnapshot.forEach((doc) => {
+      setsData.push({ id: doc.id, ...doc.data() } as LegoSet);
+    });
+    setSets(setsData);
+  };
+  
+  // Fetch sold sets from Firestore
+  const fetchSoldSets = async () => {
+    const querySnapshot = await getDocs(collection(db, "soldSets"));
+    const soldSetsData: LegoSet[] = [];
+    querySnapshot.forEach((doc) => {
+      soldSetsData.push({ id: doc.id, ...doc.data() } as LegoSet);
+    });
+    setSoldSets(soldSetsData);
+  };
+  
+  // Call these functions in useEffect
+  useEffect(() => {
+    fetchSets();
+    fetchSoldSets();
+  }, []);
 
   // Generate hash for image deduplication
   const hashImage = (imageData: string): string => {
@@ -133,108 +167,117 @@ export default function App() {
     }
   };
 
-  const handleAddSet = () => {
-    if (
-      !formData.setNumber ||
-      !formData.name ||
-      !formData.buyPrice ||
-      !formData.photo
-    ) {
-      alert("Please fill in all fields and upload a photo");
-      return;
-    }
+  const handleAddSet = async () => {
+  if (
+    !formData.setNumber ||
+    !formData.name ||
+    !formData.buyPrice ||
+    !formData.photo
+  ) {
+    alert("Please fill in all fields and upload a photo");
+    return;
+  }
 
-    const newSets: LegoSet[] = [];
-    for (let i = 0; i < parseInt(String(formData.quantity)); i++) {
-      newSets.push({
-        id: Date.now() + i,
-        setNumber: formData.setNumber,
-        name: formData.name,
-        buyPrice: parseFloat(formData.buyPrice),
-        photo: formData.photo,
-        sellPrice: null,
-        location: formData.location,
-      });
-    }
-
-    setSets([...sets, ...newSets]);
-    setFormData({
-      setNumber: "",
-      name: "",
-      buyPrice: "",
-      quantity: 1,
-      photo: null,
-      location: "Doma",
+  const newSets: Omit<LegoSet, 'id'>[] = [];
+  for (let i = 0; i < formData.quantity; i++) {
+    newSets.push({
+      setNumber: formData.setNumber,
+      name: formData.name,
+      buyPrice: parseFloat(formData.buyPrice),
+      photo: formData.photo,
+      sellPrice: null,
+      location: formData.location,
     });
-    setShowAddModal(false);
-  };
+  }
+
+  for (const set of newSets) {
+    await addDoc(collection(db, "sets"), set);
+  }
+
+  fetchSets();
+  setFormData({
+    setNumber: "",
+    name: "",
+    buyPrice: "",
+    quantity: 1,
+    photo: null,
+    location: "Doma",
+  });
+  setShowAddModal(false);
+};
 
   const handleEditSet = (set: LegoSet) => {
     setEditingSet(set);
     setShowEditModal(true);
   };
 
-  const handleUpdateSet = () => {
-    if (editingSet) {
-      setSets(sets.map((s) => (s.id === editingSet.id ? editingSet : s)));
-      setShowEditModal(false);
-      setEditingSet(null);
-    }
-  };
-
-  const handleMarkAsSold = () => {
-    if (!editingSet?.sellPrice) {
-      alert("Please enter a sell price");
-      return;
-    }
-    const soldSet = { ...editingSet, soldDate: new Date().toISOString() };
-    setSoldSets([...soldSets, soldSet]);
-    setSets(sets.filter((s) => s.id !== editingSet.id));
+  const handleUpdateSet = async () => {
+  if (editingSet) {
+    const setRef = doc(db, "sets", editingSet.id);
+    await updateDoc(setRef, { ...editingSet });
+    fetchSets();
     setShowEditModal(false);
     setEditingSet(null);
-  };
+  }
+};
 
-  const handleDeleteSet = () => {
-    if (!editingSet) return;
+  const handleMarkAsSold = async () => {
+  if (!editingSet?.sellPrice) {
+    alert("Please enter a sell price");
+    return;
+  }
+  const soldSet = { ...editingSet, soldDate: new Date().toISOString() };
+  await addDoc(collection(db, "soldSets"), soldSet);
+  await deleteDoc(doc(db, "sets", editingSet.id));
+  fetchSets();
+  fetchSoldSets();
+  setShowEditModal(false);
+  setEditingSet(null);
+};
 
-    if (
-      window.confirm(
-        `Are you sure you want to delete "${editingSet.name}"? This action cannot be undone.`
-      )
-    ) {
-      setSets(sets.filter((s) => s.id !== editingSet.id));
-      setShowEditModal(false);
-      setEditingSet(null);
-    }
-  };
+  const handleDeleteSet = async () => {
+  if (!editingSet) return;
 
-  const handleDeleteSoldSet = () => {
-    if (!editingSoldSet) return;
-
-    if (
-      window.confirm(
-        `Are you sure you want to delete "${editingSoldSet.name}"? This action cannot be undone.`
-      )
-    ) {
-      setSoldSets(soldSets.filter((s) => s.id !== editingSoldSet.id));
-      setShowSoldEditModal(false);
-      setEditingSoldSet(null);
-    }
-  };
-
-  const handleDuplicateSet = () => {
-    if (!editingSet) return;
-
-    const duplicated: LegoSet = {
-      ...editingSet,
-      id: Date.now(),
-      sellPrice: null,
-    };
-    setSets([...sets, duplicated]);
+  if (
+    window.confirm(
+      `Are you sure you want to delete "${editingSet.name}"? This action cannot be undone.`
+    )
+  ) {
+    await deleteDoc(doc(db, "sets", editingSet.id));
+    fetchSets();
     setShowEditModal(false);
     setEditingSet(null);
-    alert("Set duplicated successfully!");
+  }
+};
+
+  const handleDeleteSoldSet = async () => {
+  if (!editingSoldSet) return;
+
+  if (
+    window.confirm(
+      `Are you sure you want to delete "${editingSoldSet.name}"? This action cannot be undone.`
+    )
+  ) {
+    await deleteDoc(doc(db, "soldSets", editingSoldSet.id));
+    fetchSoldSets();
+    setShowSoldEditModal(false);
+    setEditingSoldSet(null);
+  }
+};
+
+  const handleDuplicateSet = async () => {
+  if (!editingSet) return;
+
+  const duplicated: Omit<LegoSet, 'id'> = {
+    ...editingSet,
+    sellPrice: null,
   };
+  await addDoc(collection(db, "sets"), duplicated);
+  fetchSets();
+  setShowEditModal(false);
+  setEditingSet(null);
+  alert("Set duplicated successfully!");
+};
 
   const handleEditSoldSet = (set: LegoSet) => {
     setEditingSoldSet(set);
@@ -403,29 +446,45 @@ export default function App() {
   };
 
   const importData = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        try {
-          const data = JSON.parse(event.target?.result as string);
-          // Force state update to trigger recalculation
-          setSets([]);
-          setSoldSets([]);
-          setImageCache({});
-          setTimeout(() => {
-            setSets(data.sets || []);
-            setSoldSets(data.soldSets || []);
-            setImageCache(data.imageCache || {});
-            alert("Data imported successfully!");
-          }, 0);
-        } catch (error) {
-          alert("Error importing data. Please check the file.");
+  const file = e.target.files?.[0];
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const data = JSON.parse(event.target?.result as string);
+        // Clear existing data
+        const setsCollection = collection(db, "sets");
+        const soldSetsCollection = collection(db, "soldSets");
+
+        // Delete all existing documents
+        const setsSnapshot = await getDocs(setsCollection);
+        setsSnapshot.forEach(async (doc) => {
+          await deleteDoc(doc.ref);
+        });
+        const soldSetsSnapshot = await getDocs(soldSetsCollection);
+        soldSetsSnapshot.forEach(async (doc) => {
+          await deleteDoc(doc.ref);
+        });
+
+        // Add imported data
+        for (const set of data.sets || []) {
+          await addDoc(setsCollection, set);
         }
-      };
-      reader.readAsText(file);
-    }
-  };
+        for (const soldSet of data.soldSets || []) {
+          await addDoc(soldSetsCollection, soldSet);
+        }
+
+        setImageCache(data.imageCache || {});
+        fetchSets();
+        fetchSoldSets();
+        alert("Data imported successfully!");
+      } catch (error) {
+        alert("Error importing data. Please check the file.");
+      }
+    };
+    reader.readAsText(file);
+  }
+};
 
   const calculateStats = () => {
     const totalBuyPrice = soldSets.reduce((sum, set) => sum + set.buyPrice, 0);
