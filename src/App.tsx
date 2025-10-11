@@ -1,14 +1,29 @@
 import { useState } from "react";
 import { Plus, Download, Upload, X, Save } from "lucide-react";
 
+interface LegoSet {
+  id: number;
+  name: string;
+  buyPrice: number;
+  photo: string;
+  sellPrice: number | null;
+}
+
+interface FormData {
+  name: string;
+  buyPrice: string;
+  quantity: number;
+  photo: string | null;
+}
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState("inventory");
-  const [sets, setSets] = useState([]);
-  const [soldSets, setSoldSets] = useState([]);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [editingSet, setEditingSet] = useState(null);
-  const [formData, setFormData] = useState({
+  const [activeTab, setActiveTab] = useState<string>("inventory");
+  const [sets, setSets] = useState<LegoSet[]>([]);
+  const [soldSets, setSoldSets] = useState<LegoSet[]>([]);
+  const [showAddModal, setShowAddModal] = useState<boolean>(false);
+  const [showEditModal, setShowEditModal] = useState<boolean>(false);
+  const [editingSet, setEditingSet] = useState<LegoSet | null>(null);
+  const [formData, setFormData] = useState<FormData>({
     name: "",
     buyPrice: "",
     quantity: 1,
@@ -16,7 +31,7 @@ export default function App() {
   });
 
   // Compress and convert image to base64
-  const compressImage = (file) => {
+  const compressImage = (file: File): Promise<string> => {
     return new Promise((resolve) => {
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -43,17 +58,19 @@ export default function App() {
           canvas.width = width;
           canvas.height = height;
           const ctx = canvas.getContext("2d");
-          ctx.drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL("image/jpeg", 0.7));
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL("image/jpeg", 0.7));
+          }
         };
-        img.src = e.target.result;
+        img.src = e.target?.result as string;
       };
       reader.readAsDataURL(file);
     });
   };
 
-  const handlePhotoUpload = async (e) => {
-    const file = e.target.files[0];
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
     if (file) {
       const compressed = await compressImage(file);
       setFormData({ ...formData, photo: compressed });
@@ -66,8 +83,8 @@ export default function App() {
       return;
     }
 
-    const newSets = [];
-    for (let i = 0; i < parseInt(formData.quantity); i++) {
+    const newSets: LegoSet[] = [];
+    for (let i = 0; i < parseInt(String(formData.quantity)); i++) {
       newSets.push({
         id: Date.now() + i,
         name: formData.name,
@@ -82,19 +99,21 @@ export default function App() {
     setShowAddModal(false);
   };
 
-  const handleEditSet = (set) => {
+  const handleEditSet = (set: LegoSet) => {
     setEditingSet(set);
     setShowEditModal(true);
   };
 
   const handleUpdateSet = () => {
-    setSets(sets.map((s) => (s.id === editingSet.id ? editingSet : s)));
-    setShowEditModal(false);
-    setEditingSet(null);
+    if (editingSet) {
+      setSets(sets.map((s) => (s.id === editingSet.id ? editingSet : s)));
+      setShowEditModal(false);
+      setEditingSet(null);
+    }
   };
 
   const handleMarkAsSold = () => {
-    if (!editingSet.sellPrice) {
+    if (!editingSet?.sellPrice) {
       alert("Please enter a sell price");
       return;
     }
@@ -104,9 +123,11 @@ export default function App() {
     setEditingSet(null);
   };
 
-  const handleEditPhotoUpload = async (e) => {
-    const file = e.target.files[0];
-    if (file) {
+  const handleEditPhotoUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    if (file && editingSet) {
       const compressed = await compressImage(file);
       setEditingSet({ ...editingSet, photo: compressed });
     }
@@ -130,13 +151,13 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
-  const importData = (e) => {
-    const file = e.target.files[0];
+  const importData = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onload = (event) => {
         try {
-          const data = JSON.parse(event.target.result);
+          const data = JSON.parse(event.target?.result as string);
           setSets(data.sets || []);
           setSoldSets(data.soldSets || []);
           alert("Data imported successfully!");
@@ -253,7 +274,7 @@ export default function App() {
                       />
                       <h3 className="font-semibold text-lg mb-2">{set.name}</h3>
                       <p className="text-gray-600">
-                        Buy Price: ${set.buyPrice.toFixed(2)}
+                        Buy Price: {set.buyPrice.toFixed(2)}CZK
                       </p>
                     </div>
                   ))}
@@ -277,13 +298,14 @@ export default function App() {
                     />
                     <h3 className="font-semibold text-lg mb-2">{set.name}</h3>
                     <p className="text-gray-600">
-                      Buy Price: ${set.buyPrice.toFixed(2)}
+                      Buy Price: {set.buyPrice.toFixed(2)}CZK
                     </p>
                     <p className="text-green-600">
-                      Sell Price: ${set.sellPrice.toFixed(2)}
+                      Sell Price: {set.sellPrice?.toFixed(2)}CZK
                     </p>
                     <p className="text-blue-600 font-semibold">
-                      Profit: ${(set.sellPrice - set.buyPrice).toFixed(2)}
+                      Profit: CZK
+                      {((set.sellPrice || 0) - set.buyPrice).toFixed(2)}
                     </p>
                   </div>
                 ))}
@@ -305,13 +327,13 @@ export default function App() {
                         Total Buy Price (Sold Sets):
                       </span>
                       <span className="text-xl font-bold">
-                        ${stats.totalBuyPrice.toFixed(2)}
+                        {stats.totalBuyPrice.toFixed(2)}CZK
                       </span>
                     </div>
                     <div className="flex justify-between items-center p-4 bg-gray-50 rounded">
                       <span className="font-medium">Total Sell Price:</span>
                       <span className="text-xl font-bold">
-                        ${stats.totalSellPrice.toFixed(2)}
+                        {stats.totalSellPrice.toFixed(2)}CZK
                       </span>
                     </div>
                     <div className="flex justify-between items-center p-4 bg-green-50 rounded">
@@ -321,7 +343,7 @@ export default function App() {
                           stats.profit >= 0 ? "text-green-600" : "text-red-600"
                         }`}
                       >
-                        ${stats.profit.toFixed(2)}
+                        {stats.profit.toFixed(2)}CZK
                       </span>
                     </div>
                     <div className="flex justify-between items-center p-4 bg-blue-50 rounded">
@@ -368,7 +390,7 @@ export default function App() {
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">
-                  Buy Price ($)
+                  Buy Price (CZK)
                 </label>
                 <input
                   type="number"
@@ -389,7 +411,10 @@ export default function App() {
                   min="1"
                   value={formData.quantity}
                   onChange={(e) =>
-                    setFormData({ ...formData, quantity: e.target.value })
+                    setFormData({
+                      ...formData,
+                      quantity: parseInt(e.target.value),
+                    })
                   }
                   className="w-full border rounded px-3 py-2"
                 />
@@ -447,7 +472,7 @@ export default function App() {
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">
-                  Buy Price ($)
+                  Buy Price (CZK)
                 </label>
                 <input
                   type="number"
@@ -464,7 +489,7 @@ export default function App() {
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">
-                  Sell Price ($)
+                  Sell Price (CZK)
                 </label>
                 <input
                   type="number"
