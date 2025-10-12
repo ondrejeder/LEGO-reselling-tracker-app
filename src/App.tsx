@@ -77,7 +77,7 @@ export default function App() {
     });
     setSets(setsData);
   };
-  
+
   // Fetch sold sets from Firestore
   const fetchSoldSets = async () => {
     const querySnapshot = await getDocs(collection(db, "soldSets"));
@@ -87,7 +87,7 @@ export default function App() {
     });
     setSoldSets(soldSetsData);
   };
-  
+
   // Call these functions in useEffect
   useEffect(() => {
     fetchSets();
@@ -159,51 +159,51 @@ export default function App() {
   };
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-  const compressedImage = await compressImage(file);
-  setFormData({ ...formData, photo: compressedImage });
-};
+    const compressedImage = await compressImage(file);
+    setFormData({ ...formData, photo: compressedImage });
+  };
 
   const handleAddSet = async () => {
-  if (
-    !formData.setNumber ||
-    !formData.name ||
-    !formData.buyPrice ||
-    !formData.photo
-  ) {
-    alert("Please fill in all fields and upload a photo");
-    return;
-  }
+    if (
+      !formData.setNumber ||
+      !formData.name ||
+      !formData.buyPrice ||
+      !formData.photo
+    ) {
+      alert("Please fill in all fields and upload a photo");
+      return;
+    }
 
-  const newSets: Omit<LegoSet, 'id'>[] = [];
-  for (let i = 0; i < formData.quantity; i++) {
-    newSets.push({
-      setNumber: formData.setNumber,
-      name: formData.name,
-      buyPrice: parseFloat(formData.buyPrice),
-      photo: formData.photo, // This is the compressed base64 string
-      sellPrice: null,
-      location: formData.location,
+    const newSets: Omit<LegoSet, "id">[] = [];
+    for (let i = 0; i < formData.quantity; i++) {
+      newSets.push({
+        setNumber: formData.setNumber,
+        name: formData.name,
+        buyPrice: parseFloat(formData.buyPrice),
+        photo: formData.photo, // This is the compressed base64 string
+        sellPrice: null,
+        location: formData.location,
+      });
+    }
+
+    for (const set of newSets) {
+      await addDoc(collection(db, "sets"), set);
+    }
+
+    fetchSets();
+    setFormData({
+      setNumber: "",
+      name: "",
+      buyPrice: "",
+      quantity: 1,
+      photo: null,
+      location: "Doma",
     });
-  }
-
-  for (const set of newSets) {
-    await addDoc(collection(db, "sets"), set);
-  }
-
-  fetchSets();
-  setFormData({
-    setNumber: "",
-    name: "",
-    buyPrice: "",
-    quantity: 1,
-    photo: null,
-    location: "Doma",
-  });
-  setShowAddModal(false);
-};
+    setShowAddModal(false);
+  };
 
   const handleEditSet = (set: LegoSet) => {
     setEditingSet(set);
@@ -211,73 +211,73 @@ export default function App() {
   };
 
   const handleUpdateSet = async () => {
-  if (!editingSet) return;
+    if (!editingSet) return;
 
-  const setRef = doc(db, "sets", editingSet.id);
-  await updateDoc(setRef, { ...editingSet }); // This includes the compressed base64 string
+    const setRef = doc(db, "sets", editingSet.id);
+    await updateDoc(setRef, { ...editingSet }); // This includes the compressed base64 string
 
-  fetchSets();
-  setShowEditModal(false);
-  setEditingSet(null);
-};
-
-  const handleMarkAsSold = async () => {
-  if (!editingSet?.sellPrice) {
-    alert("Please enter a sell price");
-    return;
-  }
-  const soldSet = { ...editingSet, soldDate: new Date().toISOString() };
-  await addDoc(collection(db, "soldSets"), soldSet);
-  await deleteDoc(doc(db, "sets", editingSet.id));
-  fetchSets();
-  fetchSoldSets();
-  setShowEditModal(false);
-  setEditingSet(null);
-};
-
-  const handleDeleteSet = async () => {
-  if (!editingSet) return;
-
-  if (
-    window.confirm(
-      `Are you sure you want to delete "${editingSet.name}"? This action cannot be undone.`
-    )
-  ) {
-    await deleteDoc(doc(db, "sets", editingSet.id));
     fetchSets();
     setShowEditModal(false);
     setEditingSet(null);
-  }
-};
+  };
+
+  const handleMarkAsSold = async () => {
+    if (!editingSet?.sellPrice) {
+      alert("Please enter a sell price");
+      return;
+    }
+    const soldSet = { ...editingSet, soldDate: new Date().toISOString() };
+    await addDoc(collection(db, "soldSets"), soldSet);
+    await deleteDoc(doc(db, "sets", editingSet.id));
+    fetchSets();
+    fetchSoldSets();
+    setShowEditModal(false);
+    setEditingSet(null);
+  };
+
+  const handleDeleteSet = async () => {
+    if (!editingSet) return;
+
+    if (
+      window.confirm(
+        `Are you sure you want to delete "${editingSet.name}"? This action cannot be undone.`
+      )
+    ) {
+      await deleteDoc(doc(db, "sets", editingSet.id));
+      fetchSets();
+      setShowEditModal(false);
+      setEditingSet(null);
+    }
+  };
 
   const handleDeleteSoldSet = async () => {
-  if (!editingSoldSet) return;
+    if (!editingSoldSet) return;
 
-  if (
-    window.confirm(
-      `Are you sure you want to delete "${editingSoldSet.name}"? This action cannot be undone.`
-    )
-  ) {
-    await deleteDoc(doc(db, "soldSets", editingSoldSet.id));
-    fetchSoldSets();
-    setShowSoldEditModal(false);
-    setEditingSoldSet(null);
-  }
-};
+    if (
+      window.confirm(
+        `Are you sure you want to delete "${editingSoldSet.name}"? This action cannot be undone.`
+      )
+    ) {
+      await deleteDoc(doc(db, "soldSets", editingSoldSet.id));
+      fetchSoldSets();
+      setShowSoldEditModal(false);
+      setEditingSoldSet(null);
+    }
+  };
 
   const handleDuplicateSet = async () => {
-  if (!editingSet) return;
+    if (!editingSet) return;
 
-  const duplicated: Omit<LegoSet, 'id'> = {
-    ...editingSet,
-    sellPrice: null,
+    const duplicated: Omit<LegoSet, "id"> = {
+      ...editingSet,
+      sellPrice: null,
+    };
+    await addDoc(collection(db, "sets"), duplicated);
+    fetchSets();
+    setShowEditModal(false);
+    setEditingSet(null);
+    alert("Set duplicated successfully!");
   };
-  await addDoc(collection(db, "sets"), duplicated);
-  fetchSets();
-  setShowEditModal(false);
-  setEditingSet(null);
-  alert("Set duplicated successfully!");
-};
 
   const handleEditSoldSet = (set: LegoSet) => {
     setEditingSoldSet(set);
@@ -380,204 +380,150 @@ export default function App() {
     return `${day}/${month}/${year}`;
   };
 
-  const handleEditPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-  const file = e.target.files?.[0];
-  if (!file || !editingSet) return;
+  const handleEditPhotoUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file || !editingSet) return;
 
-  const compressedImage = await compressImage(file);
-  setEditingSet({ ...editingSet, photo: compressedImage });
-};
+    const compressedImage = await compressImage(file);
+    setEditingSet({ ...editingSet, photo: compressedImage });
+  };
 
   const exportData = () => {
-  try {
-    const data = {
-      sets,
-      soldSets,
-      exportDate: new Date().toISOString(),
-    };
-    const jsonString = JSON.stringify(data, null, 2);
-    const blob = new Blob([jsonString], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
+    try {
+      const data = {
+        sets,
+        soldSets,
+        exportDate: new Date().toISOString(),
+      };
+      const jsonString = JSON.stringify(data, null, 2);
+      const blob = new Blob([jsonString], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
 
-    const now = new Date();
-    const day = String(now.getDate()).padStart(2, "0");
-    const month = String(now.getMonth() + 1).padStart(2, "0");
-    const year = now.getFullYear();
-    a.download = `lego-tracker-${day}-${month}-${year}.json`;
+      const now = new Date();
+      const day = String(now.getDate()).padStart(2, "0");
+      const month = String(now.getMonth() + 1).padStart(2, "0");
+      const year = now.getFullYear();
+      a.download = `lego-tracker-${day}-${month}-${year}.json`;
 
-    a.style.display = "none";
-    document.body.appendChild(a);
-    a.click();
+      a.style.display = "none";
+      document.body.appendChild(a);
+      a.click();
 
-    setTimeout(() => {
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }, 100);
-  } catch (error) {
-    const data = {
-      sets,
-      soldSets,
-      exportDate: new Date().toISOString(),
-    };
-    const jsonString = JSON.stringify(data, null, 2);
-    navigator.clipboard
-      .writeText(jsonString)
-      .then(() => {
-        alert(
-          "Export download blocked! Data has been copied to your clipboard instead. Paste it into a text file and save as .json"
-        );
-      })
-      .catch(() => {
-        alert(
-          "Export failed. Please try again or use the deployed version on Vercel."
-        );
-      });
-  }
-};
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 100);
+    } catch (error) {
+      const data = {
+        sets,
+        soldSets,
+        exportDate: new Date().toISOString(),
+      };
+      const jsonString = JSON.stringify(data, null, 2);
+      navigator.clipboard
+        .writeText(jsonString)
+        .then(() => {
+          alert(
+            "Export download blocked! Data has been copied to your clipboard instead. Paste it into a text file and save as .json"
+          );
+        })
+        .catch(() => {
+          alert(
+            "Export failed. Please try again or use the deployed version on Vercel."
+          );
+        });
+    }
+  };
 
   interface LegoSet {
-  id?: string;
-  setNumber: string;
-  name: string;
-  buyPrice: number;
-  photo: string;
-  sellPrice: number | null;
-  location: "Doma" | "Kolej";
-  soldDate?: string;
-}
-
-interface ImportData {
-  sets?: LegoSet[];
-  soldSets?: LegoSet[];
-  imageCache?: { [key: string]: string };
-}
-
-const importData = (e: React.ChangeEvent<HTMLInputElement>) => {
-  const file = e.target.files?.[0];
-  if (file) {
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      try {
-        const content = event.target?.result as string;
-        const data: ImportData = JSON.parse(content);
-        console.log("Importing data:", data);
-
-        // Clear existing data
-        const setsCollection = collection(db, "sets");
-        const soldSetsCollection = collection(db, "soldSets");
-
-        // Delete all existing documents
-        const setsSnapshot = await getDocs(setsCollection);
-        setsSnapshot.forEach(async (doc) => {
-          await deleteDoc(doc.ref);
-        });
-
-        const soldSetsSnapshot = await getDocs(soldSetsCollection);
-        soldSetsSnapshot.forEach(async (doc) => {
-          await deleteDoc(doc.ref);
-        });
-
-        // Check if the JSON file is in the old format (with imageCache)
-        if (data.imageCache) {
-          console.log("Detected old format with imageCache");
-
-          // Restore the image cache
-          setImageCache(data.imageCache);
-
-          // Import sets with image hashes
-          if (data.sets) {
-            for (const set of data.sets) {
-              if (!set.photo || !data.imageCache[set.photo]) {
-                console.error("Missing photo data for set:", set);
-                continue;
-              }
-              const newSet = {
-                setNumber: set.setNumber,
-                name: set.name,
-                buyPrice: set.buyPrice,
-                photo: set.photo, // This is the image hash
-                sellPrice: set.sellPrice,
-                location: set.location,
-              };
-              await addDoc(setsCollection, newSet);
-            }
-          }
-
-          // Import sold sets with image hashes
-          if (data.soldSets) {
-            for (const soldSet of data.soldSets) {
-              if (!soldSet.photo || !data.imageCache[soldSet.photo]) {
-                console.error("Missing photo data for soldSet:", soldSet);
-                continue;
-              }
-              const newSoldSet = {
-                setNumber: soldSet.setNumber,
-                name: soldSet.name,
-                buyPrice: soldSet.buyPrice,
-                photo: soldSet.photo, // This is the image hash
-                sellPrice: soldSet.sellPrice,
-                location: soldSet.location,
-                soldDate: soldSet.soldDate,
-              };
-              await addDoc(soldSetsCollection, newSoldSet);
-            }
-          }
-        } else {
-          console.log("Detected new format without imageCache");
-
-          // Import sets with base64 image data
-          if (data.sets) {
-            for (const set of data.sets) {
-              if (!set.photo) {
-                console.error("Missing photo data for set:", set);
-                continue;
-              }
-              const newSet = {
-                setNumber: set.setNumber,
-                name: set.name,
-                buyPrice: set.buyPrice,
-                photo: set.photo, // This is the base64 image data
-                sellPrice: set.sellPrice,
-                location: set.location,
-              };
-              await addDoc(setsCollection, newSet);
-            }
-          }
-
-          // Import sold sets with base64 image data
-          if (data.soldSets) {
-            for (const soldSet of data.soldSets) {
-              if (!soldSet.photo) {
-                console.error("Missing photo data for soldSet:", soldSet);
-                continue;
-              }
-              const newSoldSet = {
-                setNumber: soldSet.setNumber,
-                name: soldSet.name,
-                buyPrice: soldSet.buyPrice,
-                photo: soldSet.photo, // This is the base64 image data
-                sellPrice: soldSet.sellPrice,
-                location: soldSet.location,
-                soldDate: soldSet.soldDate,
-              };
-              await addDoc(soldSetsCollection, newSoldSet);
-            }
-          }
-        }
-
-        fetchSets();
-        fetchSoldSets();
-        alert("Data imported successfully!");
-      } catch (error) {
-        console.error("Error importing data:", error);
-        alert(`Error importing data. Details: ${error instanceof Error ? error.message : String(error)}. Please check the file format and console for more information.`);
-      }
-    };
-    reader.readAsText(file);
+    id?: string;
+    setNumber: string;
+    name: string;
+    buyPrice: number;
+    photo: string;
+    sellPrice: number | null;
+    location: "Doma" | "Kolej";
+    soldDate?: string;
   }
-};
+
+  interface ImportData {
+    sets?: LegoSet[];
+    soldSets?: LegoSet[];
+  }
+
+  const importData = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        try {
+          const content = event.target?.result as string;
+          const data: ImportData = JSON.parse(content);
+          console.log("Importing data:", data);
+
+          // Clear existing data from Firebase
+          const setsCollection = collection(db, "sets");
+          const soldSetsCollection = collection(db, "soldSets");
+
+          // Delete all existing sets
+          const setsSnapshot = await getDocs(setsCollection);
+          const deleteSetPromises = setsSnapshot.docs.map((doc) =>
+            deleteDoc(doc.ref)
+          );
+          await Promise.all(deleteSetPromises);
+
+          // Delete all existing sold sets
+          const soldSetsSnapshot = await getDocs(soldSetsCollection);
+          const deleteSoldSetPromises = soldSetsSnapshot.docs.map((doc) =>
+            deleteDoc(doc.ref)
+          );
+          await Promise.all(deleteSoldSetPromises);
+
+          console.log("Cleared existing data from Firebase");
+
+          // Import sets
+          if (data.sets && data.sets.length > 0) {
+            const addSetPromises = data.sets.map((set) => {
+              // Remove the id field before adding to Firestore (it will generate its own)
+              const { id, ...setData } = set;
+              return addDoc(setsCollection, setData);
+            });
+            await Promise.all(addSetPromises);
+            console.log(`Imported ${data.sets.length} sets`);
+          }
+
+          // Import sold sets
+          if (data.soldSets && data.soldSets.length > 0) {
+            const addSoldSetPromises = data.soldSets.map((soldSet) => {
+              // Remove the id field before adding to Firestore
+              const { id, ...soldSetData } = soldSet;
+              return addDoc(soldSetsCollection, soldSetData);
+            });
+            await Promise.all(addSoldSetPromises);
+            console.log(`Imported ${data.soldSets.length} sold sets`);
+          }
+
+          // Refresh the data
+          await fetchSets();
+          await fetchSoldSets();
+
+          alert("Data imported successfully!");
+        } catch (error) {
+          console.error("Error importing data:", error);
+          alert(
+            `Error importing data: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          );
+        }
+      };
+      reader.readAsText(file);
+    }
+  };
 
   const calculateStats = () => {
     const totalBuyPrice = soldSets.reduce((sum, set) => sum + set.buyPrice, 0);
