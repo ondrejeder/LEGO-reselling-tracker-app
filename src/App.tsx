@@ -10,6 +10,7 @@ import {
   Copy,
   Trash2,
   LogOut,
+  ArrowUp,
 } from "lucide-react";
 import {
   collection,
@@ -67,6 +68,7 @@ export default function App() {
   const [editingSoldSet, setEditingSoldSet] = useState<LegoSet | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [soldSearchQuery, setSoldSearchQuery] = useState<string>("");
+  const [showScrollTop, setShowScrollTop] = useState<boolean>(false);
 
   type SortByType =
     | "default"
@@ -113,6 +115,24 @@ export default function App() {
       fetchSoldSets();
     }
   }, [user]);
+
+  // Scroll listener for showing scroll-to-top button
+  useEffect(() => {
+    const handleScroll = () => {
+      if (window.scrollY > 300) {
+        setShowScrollTop(true);
+      } else {
+        setShowScrollTop(false);
+      }
+    };
+
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   // Sign in with Google
   const handleSignIn = async () => {
@@ -605,15 +625,9 @@ export default function App() {
       (sum, set) => sum + set.buyPrice,
       0
     );
+    // Changed: Average profit % is now total profit / total buy price * 100
     const averageProfitPercent =
-      soldSets.length > 0
-        ? soldSets.reduce((sum, set) => {
-            const profitPercent = set.sellPrice
-              ? ((set.sellPrice - set.buyPrice) / set.buyPrice) * 100
-              : 0;
-            return sum + profitPercent;
-          }, 0) / soldSets.length
-        : 0;
+      totalBuyPrice > 0 ? (profit / totalBuyPrice) * 100 : 0;
     return {
       totalBuyPrice,
       totalSellPrice,
@@ -1057,6 +1071,17 @@ export default function App() {
         </div>
       </div>
 
+      {/* Scroll to Top Button */}
+      {showScrollTop && (activeTab === "inventory" || activeTab === "sold") && (
+        <button
+          onClick={scrollToTop}
+          className="fixed bottom-8 right-8 p-4 bg-blue-500 text-white rounded-full shadow-lg hover:bg-blue-600 transition-all z-50"
+          title="Scroll to top"
+        >
+          <ArrowUp size={24} />
+        </button>
+      )}
+
       {/* Sold Set Edit Modal */}
       {showSoldEditModal && editingSoldSet && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -1083,8 +1108,8 @@ export default function App() {
                   Buy Price: {Math.round(editingSoldSet.buyPrice)} CZK
                 </p>
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">
+              <div className="flex items-center gap-3">
+                <label className="text-sm font-medium w-32">
                   Sell Price (CZK)
                 </label>
                 <input
@@ -1097,13 +1122,11 @@ export default function App() {
                       sellPrice: parseFloat(e.target.value) || null,
                     })
                   }
-                  className="w-full border rounded px-3 py-2"
+                  className="flex-1 border rounded px-3 py-2"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Sold Date
-                </label>
+              <div className="flex items-center gap-3">
+                <label className="text-sm font-medium w-32">Sold Date</label>
                 <input
                   type="date"
                   value={
@@ -1119,7 +1142,7 @@ export default function App() {
                         : undefined,
                     })
                   }
-                  className="w-full border rounded px-3 py-2"
+                  className="flex-1 border rounded px-3 py-2"
                 />
               </div>
               <button
@@ -1152,34 +1175,30 @@ export default function App() {
               </button>
             </div>
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Set Number
-                </label>
+              <div className="flex items-center gap-3">
+                <label className="text-sm font-medium w-32">Set Number</label>
                 <input
                   type="text"
                   value={formData.setNumber}
                   onChange={(e) =>
                     setFormData({ ...formData, setNumber: e.target.value })
                   }
-                  className="w-full border rounded px-3 py-2"
+                  className="flex-1 border rounded px-3 py-2"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Set Name
-                </label>
+              <div className="flex items-center gap-3">
+                <label className="text-sm font-medium w-32">Set Name</label>
                 <input
                   type="text"
                   value={formData.name}
                   onChange={(e) =>
                     setFormData({ ...formData, name: e.target.value })
                   }
-                  className="w-full border rounded px-3 py-2"
+                  className="flex-1 border rounded px-3 py-2"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">
+              <div className="flex items-center gap-3">
+                <label className="text-sm font-medium w-32">
                   Buy Price (CZK)
                 </label>
                 <input
@@ -1189,13 +1208,11 @@ export default function App() {
                   onChange={(e) =>
                     setFormData({ ...formData, buyPrice: e.target.value })
                   }
-                  className="w-full border rounded px-3 py-2"
+                  className="flex-1 border rounded px-3 py-2"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Quantity
-                </label>
+              <div className="flex items-center gap-3">
+                <label className="text-sm font-medium w-32">Quantity</label>
                 <input
                   type="number"
                   min="1"
@@ -1206,13 +1223,11 @@ export default function App() {
                       quantity: parseInt(e.target.value),
                     })
                   }
-                  className="w-full border rounded px-3 py-2"
+                  className="flex-1 border rounded px-3 py-2"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Location
-                </label>
+              <div className="flex items-center gap-3">
+                <label className="text-sm font-medium w-32">Location</label>
                 <select
                   value={formData.location}
                   onChange={(e) =>
@@ -1221,7 +1236,7 @@ export default function App() {
                       location: e.target.value as "Doma" | "Kolej",
                     })
                   }
-                  className="w-full border rounded px-3 py-2"
+                  className="flex-1 border rounded px-3 py-2"
                 >
                   <option value="Doma">Doma</option>
                   <option value="Kolej">Kolej</option>
@@ -1278,34 +1293,30 @@ export default function App() {
               </button>
             </div>
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Set Number
-                </label>
+              <div className="flex items-center gap-3">
+                <label className="text-sm font-medium w-32">Set Number</label>
                 <input
                   type="text"
                   value={editingSet.setNumber}
                   onChange={(e) =>
                     setEditingSet({ ...editingSet, setNumber: e.target.value })
                   }
-                  className="w-full border rounded px-3 py-2"
+                  className="flex-1 border rounded px-3 py-2"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Set Name
-                </label>
+              <div className="flex items-center gap-3">
+                <label className="text-sm font-medium w-32">Set Name</label>
                 <input
                   type="text"
                   value={editingSet.name}
                   onChange={(e) =>
                     setEditingSet({ ...editingSet, name: e.target.value })
                   }
-                  className="w-full border rounded px-3 py-2"
+                  className="flex-1 border rounded px-3 py-2"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">
+              <div className="flex items-center gap-3">
+                <label className="text-sm font-medium w-32">
                   Buy Price (CZK)
                 </label>
                 <input
@@ -1318,11 +1329,11 @@ export default function App() {
                       buyPrice: parseFloat(e.target.value),
                     })
                   }
-                  className="w-full border rounded px-3 py-2"
+                  className="flex-1 border rounded px-3 py-2"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">
+              <div className="flex items-center gap-3">
+                <label className="text-sm font-medium w-32">
                   Sell Price (CZK)
                 </label>
                 <input
@@ -1335,13 +1346,11 @@ export default function App() {
                       sellPrice: parseFloat(e.target.value) || null,
                     })
                   }
-                  className="w-full border rounded px-3 py-2"
+                  className="flex-1 border rounded px-3 py-2"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Location
-                </label>
+              <div className="flex items-center gap-3">
+                <label className="text-sm font-medium w-32">Location</label>
                 <select
                   value={editingSet.location}
                   onChange={(e) =>
@@ -1350,7 +1359,7 @@ export default function App() {
                       location: e.target.value as "Doma" | "Kolej",
                     })
                   }
-                  className="w-full border rounded px-3 py-2"
+                  className="flex-1 border rounded px-3 py-2"
                 >
                   <option value="Doma">Doma</option>
                   <option value="Kolej">Kolej</option>
