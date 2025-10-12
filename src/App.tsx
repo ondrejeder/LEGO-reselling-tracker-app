@@ -579,8 +579,6 @@ const importData = (e: React.ChangeEvent<HTMLInputElement>) => {
   }
 };
 
-
-
   const calculateStats = () => {
     const totalBuyPrice = soldSets.reduce((sum, set) => sum + set.buyPrice, 0);
     const totalSellPrice = soldSets.reduce(
