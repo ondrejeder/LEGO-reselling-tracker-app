@@ -455,8 +455,7 @@ export default function App() {
       reader.onload = async (event) => {
         try {
           const content = event.target?.result as string;
-          const data: ImportData & { imageCache?: { [key: string]: string } } =
-            JSON.parse(content);
+          const data: ImportData = JSON.parse(content);
           console.log("Importing data:", data);
 
           const setsCollection = collection(db, "sets");
@@ -478,27 +477,20 @@ export default function App() {
 
           console.log("Cleared existing data from Firebase");
 
-          // Helper function to resolve image (handle both old cache format and new direct format)
-          const resolveImage = (photoReference: string): string => {
-            // If imageCache exists and the photo is a hash reference, resolve it
-            if (data.imageCache && data.imageCache[photoReference]) {
-              return data.imageCache[photoReference];
-            }
-            // Otherwise, assume it's already a base64 image
-            return photoReference;
-          };
-
           // Import sets
           if (data.sets && data.sets.length > 0) {
             const addSetPromises = data.sets.map((set) => {
-              const { id, ...setData } = set;
-              // Resolve the image if it's a hash reference
               const resolvedSet = {
-                ...setData,
-                photo: resolveImage(setData.photo),
+                setNumber: set.setNumber,
+                name: set.name,
+                buyPrice: set.buyPrice,
+                sellPrice: set.sellPrice || null,
+                location: set.location || "Doma",
+                photo: set.photo,
               };
               return addDoc(setsCollection, resolvedSet);
             });
+
             await Promise.all(addSetPromises);
             console.log(`Imported ${data.sets.length} sets`);
           }
@@ -506,14 +498,18 @@ export default function App() {
           // Import sold sets
           if (data.soldSets && data.soldSets.length > 0) {
             const addSoldSetPromises = data.soldSets.map((soldSet) => {
-              const { id, ...soldSetData } = soldSet;
-              // Resolve the image if it's a hash reference
               const resolvedSoldSet = {
-                ...soldSetData,
-                photo: resolveImage(soldSetData.photo),
+                setNumber: soldSet.setNumber,
+                name: soldSet.name,
+                buyPrice: soldSet.buyPrice,
+                sellPrice: soldSet.sellPrice,
+                location: soldSet.location || "Doma",
+                photo: soldSet.photo,
+                soldDate: soldSet.soldDate,
               };
               return addDoc(soldSetsCollection, resolvedSoldSet);
             });
+
             await Promise.all(addSoldSetPromises);
             console.log(`Imported ${data.soldSets.length} sold sets`);
           }
