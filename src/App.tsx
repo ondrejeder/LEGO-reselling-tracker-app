@@ -18,8 +18,7 @@ import {
   deleteDoc,
   doc,
 } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { db, storage } from "./firebase";
+import { db } from "./firebase";
 
 interface LegoSet {
   id: string;
@@ -41,6 +40,11 @@ interface FormData {
   location: "Doma" | "Kolej";
 }
 
+interface ImportData {
+  sets?: Array<Omit<LegoSet, "id"> & { id?: string }>;
+  soldSets?: Array<Omit<LegoSet, "id"> & { id?: string }>;
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<string>("inventory");
   const [sets, setSets] = useState<LegoSet[]>([]);
@@ -52,13 +56,23 @@ export default function App() {
   const [editingSoldSet, setEditingSoldSet] = useState<LegoSet | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [soldSearchQuery, setSoldSearchQuery] = useState<string>("");
-  const [sortBy, setSortBy] = useState<
-    "default" | "number-asc" | "number-desc" | "price-asc" | "price-desc"
-  >("default");
-  const [soldSortBy, setSoldSortBy] = useState<
-    "date" | "profit-asc" | "profit-desc" | "profit-pct-asc" | "profit-pct-desc"
-  >("date");
-  const [imageCache, setImageCache] = useState<{ [hash: string]: string }>({});
+
+  type SortByType =
+    | "default"
+    | "number-asc"
+    | "number-desc"
+    | "price-asc"
+    | "price-desc";
+  const [sortBy, setSortBy] = useState<SortByType>("default");
+
+  type SoldSortByType =
+    | "date"
+    | "profit-asc"
+    | "profit-desc"
+    | "profit-pct-asc"
+    | "profit-pct-desc";
+  const [soldSortBy, setSoldSortBy] = useState<SoldSortByType>("date");
+
   const [formData, setFormData] = useState<FormData>({
     setNumber: "",
     name: "",
@@ -72,8 +86,8 @@ export default function App() {
   const fetchSets = async () => {
     const querySnapshot = await getDocs(collection(db, "sets"));
     const setsData: LegoSet[] = [];
-    querySnapshot.forEach((doc) => {
-      setsData.push({ id: doc.id, ...doc.data() } as LegoSet);
+    querySnapshot.forEach((docSnap) => {
+      setsData.push({ id: docSnap.id, ...docSnap.data() } as LegoSet);
     });
     setSets(setsData);
   };
@@ -82,8 +96,8 @@ export default function App() {
   const fetchSoldSets = async () => {
     const querySnapshot = await getDocs(collection(db, "soldSets"));
     const soldSetsData: LegoSet[] = [];
-    querySnapshot.forEach((doc) => {
-      soldSetsData.push({ id: doc.id, ...doc.data() } as LegoSet);
+    querySnapshot.forEach((docSnap) => {
+      soldSetsData.push({ id: docSnap.id, ...docSnap.data() } as LegoSet);
     });
     setSoldSets(soldSetsData);
   };
@@ -93,31 +107,6 @@ export default function App() {
     fetchSets();
     fetchSoldSets();
   }, []);
-
-  // Generate hash for image deduplication
-  const hashImage = (imageData: string): string => {
-    let hash = 0;
-    for (let i = 0; i < Math.min(imageData.length, 1000); i++) {
-      const char = imageData.charCodeAt(i);
-      hash = (hash << 5) - hash + char;
-      hash = hash & hash;
-    }
-    return hash.toString(36);
-  };
-
-  // Store image in cache and return hash
-  const cacheImage = (imageData: string): string => {
-    const hash = hashImage(imageData);
-    if (!imageCache[hash]) {
-      setImageCache((prev) => ({ ...prev, [hash]: imageData }));
-    }
-    return hash;
-  };
-
-  // Get image from cache by hash
-  const getImageFromCache = (hash: string): string => {
-    return imageCache[hash] || hash; // fallback to hash if not found (for old data)
-  };
 
   // Compress and convert image to base64
   const compressImage = (file: File): Promise<string> => {
@@ -183,7 +172,7 @@ export default function App() {
         setNumber: formData.setNumber,
         name: formData.name,
         buyPrice: parseFloat(formData.buyPrice),
-        photo: formData.photo, // This is the compressed base64 string
+        photo: formData.photo,
         sellPrice: null,
         location: formData.location,
       });
@@ -214,7 +203,15 @@ export default function App() {
     if (!editingSet) return;
 
     const setRef = doc(db, "sets", editingSet.id);
-    await updateDoc(setRef, { ...editingSet }); // This includes the compressed base64 string
+
+    await updateDoc(setRef, {
+      setNumber: editingSet.setNumber,
+      name: editingSet.name,
+      buyPrice: editingSet.buyPrice,
+      photo: editingSet.photo,
+      sellPrice: editingSet.sellPrice,
+      location: editingSet.location,
+    });
 
     fetchSets();
     setShowEditModal(false);
@@ -226,7 +223,8 @@ export default function App() {
       alert("Please enter a sell price");
       return;
     }
-    const soldSet = { ...editingSet, soldDate: new Date().toISOString() };
+    const { id, ...soldSetData } = editingSet;
+    const soldSet = { ...soldSetData, soldDate: new Date().toISOString() };
     await addDoc(collection(db, "soldSets"), soldSet);
     await deleteDoc(doc(db, "sets", editingSet.id));
     fetchSets();
@@ -268,8 +266,9 @@ export default function App() {
   const handleDuplicateSet = async () => {
     if (!editingSet) return;
 
-    const duplicated: Omit<LegoSet, "id"> = {
-      ...editingSet,
+    const { id, ...duplicateData } = editingSet;
+    const duplicated = {
+      ...duplicateData,
       sellPrice: null,
     };
     await addDoc(collection(db, "sets"), duplicated);
@@ -284,14 +283,24 @@ export default function App() {
     setShowSoldEditModal(true);
   };
 
-  const handleUpdateSoldSet = () => {
-    if (editingSoldSet) {
-      setSoldSets(
-        soldSets.map((s) => (s.id === editingSoldSet.id ? editingSoldSet : s))
-      );
-      setShowSoldEditModal(false);
-      setEditingSoldSet(null);
-    }
+  const handleUpdateSoldSet = async () => {
+    if (!editingSoldSet) return;
+
+    const setRef = doc(db, "soldSets", editingSoldSet.id);
+
+    await updateDoc(setRef, {
+      setNumber: editingSoldSet.setNumber,
+      name: editingSoldSet.name,
+      buyPrice: editingSoldSet.buyPrice,
+      photo: editingSoldSet.photo,
+      sellPrice: editingSoldSet.sellPrice,
+      location: editingSoldSet.location,
+      soldDate: editingSoldSet.soldDate,
+    });
+
+    fetchSoldSets();
+    setShowSoldEditModal(false);
+    setEditingSoldSet(null);
   };
 
   const handleSoldSort = (type: "profit" | "profit-pct") => {
@@ -317,7 +326,7 @@ export default function App() {
       if (soldSortBy === "date") {
         const dateA = new Date(a.soldDate || 0).getTime();
         const dateB = new Date(b.soldDate || 0).getTime();
-        return dateB - dateA; // newest first
+        return dateB - dateA;
       }
 
       const profitA = (a.sellPrice || 0) - a.buyPrice;
@@ -439,22 +448,6 @@ export default function App() {
     }
   };
 
-  interface LegoSet {
-    id?: string;
-    setNumber: string;
-    name: string;
-    buyPrice: number;
-    photo: string;
-    sellPrice: number | null;
-    location: "Doma" | "Kolej";
-    soldDate?: string;
-  }
-
-  interface ImportData {
-    sets?: LegoSet[];
-    soldSets?: LegoSet[];
-  }
-
   const importData = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -465,21 +458,20 @@ export default function App() {
           const data: ImportData = JSON.parse(content);
           console.log("Importing data:", data);
 
-          // Clear existing data from Firebase
           const setsCollection = collection(db, "sets");
           const soldSetsCollection = collection(db, "soldSets");
 
           // Delete all existing sets
           const setsSnapshot = await getDocs(setsCollection);
-          const deleteSetPromises = setsSnapshot.docs.map((doc) =>
-            deleteDoc(doc.ref)
+          const deleteSetPromises = setsSnapshot.docs.map((docSnap) =>
+            deleteDoc(docSnap.ref)
           );
           await Promise.all(deleteSetPromises);
 
           // Delete all existing sold sets
           const soldSetsSnapshot = await getDocs(soldSetsCollection);
-          const deleteSoldSetPromises = soldSetsSnapshot.docs.map((doc) =>
-            deleteDoc(doc.ref)
+          const deleteSoldSetPromises = soldSetsSnapshot.docs.map((docSnap) =>
+            deleteDoc(docSnap.ref)
           );
           await Promise.all(deleteSoldSetPromises);
 
@@ -488,7 +480,6 @@ export default function App() {
           // Import sets
           if (data.sets && data.sets.length > 0) {
             const addSetPromises = data.sets.map((set) => {
-              // Remove the id field before adding to Firestore (it will generate its own)
               const { id, ...setData } = set;
               return addDoc(setsCollection, setData);
             });
@@ -499,7 +490,6 @@ export default function App() {
           // Import sold sets
           if (data.soldSets && data.soldSets.length > 0) {
             const addSoldSetPromises = data.soldSets.map((soldSet) => {
-              // Remove the id field before adding to Firestore
               const { id, ...soldSetData } = soldSet;
               return addDoc(soldSetsCollection, soldSetData);
             });
@@ -507,7 +497,6 @@ export default function App() {
             console.log(`Imported ${data.soldSets.length} sold sets`);
           }
 
-          // Refresh the data
           await fetchSets();
           await fetchSoldSets();
 
@@ -673,7 +662,7 @@ export default function App() {
                       className="bg-white border rounded-lg p-4 hover:shadow-lg transition relative"
                     >
                       <img
-                        src={getImageFromCache(set.photo)}
+                        src={set.photo}
                         alt={set.name}
                         className="w-full h-48 object-cover rounded mb-3"
                       />
@@ -777,7 +766,7 @@ export default function App() {
                         className="bg-white border rounded-lg p-4 hover:shadow-lg transition relative"
                       >
                         <img
-                          src={getImageFromCache(set.photo)}
+                          src={set.photo}
                           alt={set.name}
                           className="w-full h-48 object-cover rounded mb-3"
                         />
@@ -919,7 +908,7 @@ export default function App() {
 
       {/* Sold Set Edit Modal */}
       {showSoldEditModal && editingSoldSet && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg p-6 max-w-md w-full">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-2xl font-bold">Edit Sold Price</h2>
@@ -930,7 +919,7 @@ export default function App() {
             <div className="space-y-4">
               <div>
                 <img
-                  src={getImageFromCache(editingSoldSet.photo)}
+                  src={editingSoldSet.photo}
                   alt={editingSoldSet.name}
                   className="w-full h-32 object-cover rounded"
                 />
@@ -1092,7 +1081,7 @@ export default function App() {
                 {formData.photo ? (
                   <div className="relative">
                     <img
-                      src={getImageFromCache(formData.photo)}
+                      src={formData.photo}
                       alt="Preview"
                       className="w-full h-48 object-cover rounded cursor-pointer"
                       onClick={() =>
@@ -1220,7 +1209,7 @@ export default function App() {
                 <label className="block text-sm font-medium mb-1">Photo</label>
                 <div className="relative">
                   <img
-                    src={getImageFromCache(editingSet.photo)}
+                    src={editingSet.photo}
                     alt="Preview"
                     className="w-full h-48 object-cover rounded cursor-pointer"
                     onClick={() =>
