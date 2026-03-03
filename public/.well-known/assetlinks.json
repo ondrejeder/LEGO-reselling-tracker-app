@@ -1,0 +1,14 @@
+[
+    {
+        "relation": [
+            "delegate_permission/common.handle_all_urls"
+        ],
+        "target": {
+            "namespace": "android_app",
+            "package_name": "app.ondrejeder.brickinvest.twa",
+            "sha256_cert_fingerprints": [
+                "FD:61:FE:65:5B:56:AE:2D:8B:EF:A4:AC:FA:FC:22:B2:B1:65:46:52:5D:92:A5:23:2C:98:41:F9:C0:4F:82:0C"
+            ]
+        }
+    }
+]
