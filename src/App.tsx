@@ -1,140 +1,76 @@
 import { useState, useEffect } from "react";
-import {
-  Plus,
-  Download,
-  Upload,
-  X,
-  Save,
-  Edit2,
-  DollarSign,
-  Copy,
-  Trash2,
-  LogOut,
-  ArrowUp,
-} from "lucide-react";
-import {
-  collection,
-  addDoc,
-  getDocs,
-  updateDoc,
-  deleteDoc,
-  doc,
-} from "firebase/firestore";
-import {
-  signInWithPopup,
-  signOut,
-  onAuthStateChanged,
-  User,
-} from "firebase/auth";
-import { db, auth, googleProvider } from "./firebase";
+import { LogOut, ArrowUp } from "lucide-react";
+import { signInWithPopup, signOut, onAuthStateChanged, User } from "firebase/auth";
+import { auth, googleProvider, db } from "./firebase";
 
-interface LegoSet {
-  id: string;
-  setNumber: string;
-  name: string;
-  buyPrice: number;
-  photo: string;
-  sellPrice: number | null;
-  location: "Doma" | "Kolej";
-  soldDate?: string;
-}
+import { LegoSet, FormData } from "./types";
+import { useSets } from "./hooks/useSets";
+import { useSoldSets } from "./hooks/useSoldSets";
+import { exportData, handleImportData } from "./utils/exportImport";
 
-interface FormData {
-  setNumber: string;
-  name: string;
-  buyPrice: string;
-  quantity: number;
-  photo: string | null;
-  location: "Doma" | "Kolej";
-}
-
-interface ImportData {
-  sets?: Array<Omit<LegoSet, "id"> & { id?: string }>;
-  soldSets?: Array<Omit<LegoSet, "id"> & { id?: string }>;
-}
+import { AddModal } from "./components/AddModal";
+import { EditModal } from "./components/EditModal";
+import { SoldEditModal } from "./components/SoldEditModal";
+import { InventoryTab } from "./components/InventoryTab";
+import { SoldTab } from "./components/SoldTab";
+import { StatsTab } from "./components/StatsTab";
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loadingUser, setLoadingUser] = useState(true);
   const [authError, setAuthError] = useState<string>("");
 
   const [activeTab, setActiveTab] = useState<string>("inventory");
-  const [sets, setSets] = useState<LegoSet[]>([]);
-  const [soldSets, setSoldSets] = useState<LegoSet[]>([]);
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
   const [showEditModal, setShowEditModal] = useState<boolean>(false);
   const [showSoldEditModal, setShowSoldEditModal] = useState<boolean>(false);
   const [editingSet, setEditingSet] = useState<LegoSet | null>(null);
   const [editingSoldSet, setEditingSoldSet] = useState<LegoSet | null>(null);
-  const [searchQuery, setSearchQuery] = useState<string>("");
-  const [soldSearchQuery, setSoldSearchQuery] = useState<string>("");
   const [showScrollTop, setShowScrollTop] = useState<boolean>(false);
 
-  type SortByType =
-    | "default"
-    | "number-asc"
-    | "number-desc"
-    | "price-asc"
-    | "price-desc";
-  const [sortBy, setSortBy] = useState<SortByType>("default");
-
-  type SoldSortByType =
-    | "date"
-    | "profit-asc"
-    | "profit-desc"
-    | "profit-pct-asc"
-    | "profit-pct-desc";
-  const [soldSortBy, setSoldSortBy] = useState<SoldSortByType>("date");
-
-  const [formData, setFormData] = useState<FormData>({
-    setNumber: "",
-    name: "",
-    buyPrice: "",
-    quantity: 1,
-    photo: null,
-    location: "Doma",
-  });
-
-  // Authentication listener
+  // Auth listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
-      setLoading(false);
+      setLoadingUser(false);
       if (currentUser) {
         setAuthError("");
       }
     });
-
     return () => unsubscribe();
   }, []);
 
-  // Fetch data when user is authenticated
-  useEffect(() => {
-    if (user) {
-      fetchSets();
-      fetchSoldSets();
-    }
-  }, [user]);
+  const userId = user?.uid;
 
-  // Scroll listener for showing scroll-to-top button
-  useEffect(() => {
-    const handleScroll = () => {
-      if (window.scrollY > 300) {
-        setShowScrollTop(true);
-      } else {
-        setShowScrollTop(false);
-      }
-    };
+  // React Query Hooks
+  const {
+    sets,
+    isLoading: isLoadingSets,
+    addSet,
+    updateSet,
+    deleteSetAsync,
+  } = useSets(userId);
 
+  const {
+    soldSets,
+    isLoading: isLoadingSoldSets,
+    addSoldSet,
+    updateSoldSet,
+    deleteSoldSetAsync,
+  } = useSoldSets(userId);
+
+  const loading = loadingUser || (user && (isLoadingSets || isLoadingSoldSets));
+
+  // Scroll logic
+  useEffect(() => {
+    const handleScroll = () => setShowScrollTop(window.scrollY > 300);
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  const scrollToTop = () => {
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
+  const scrollToTop = () => window.scrollTo({ top: 0, behavior: "smooth" });
 
-  // Sign in with Google
+  // Auth Handlers
   const handleSignIn = async () => {
     try {
       setAuthError("");
@@ -145,502 +81,134 @@ export default function App() {
     }
   };
 
-  // Sign out
   const handleSignOut = async () => {
     try {
       await signOut(auth);
-      setSets([]);
-      setSoldSets([]);
     } catch (error) {
       console.error("Sign out error:", error);
       setAuthError("Failed to sign out. Please try again.");
     }
   };
 
-  // Fetch sets from Firestore (user-specific)
-  const fetchSets = async () => {
-    if (!user) return;
-    const querySnapshot = await getDocs(
-      collection(db, "users", user.uid, "sets")
-    );
-    const setsData: LegoSet[] = [];
-    querySnapshot.forEach((docSnap) => {
-      setsData.push({ id: docSnap.id, ...docSnap.data() } as LegoSet);
-    });
-    setSets(setsData);
-  };
-
-  // Fetch sold sets from Firestore (user-specific)
-  const fetchSoldSets = async () => {
-    if (!user) return;
-    const querySnapshot = await getDocs(
-      collection(db, "users", user.uid, "soldSets")
-    );
-    const soldSetsData: LegoSet[] = [];
-    querySnapshot.forEach((docSnap) => {
-      soldSetsData.push({ id: docSnap.id, ...docSnap.data() } as LegoSet);
-    });
-    setSoldSets(soldSetsData);
-  };
-
-  // Compress and convert image to base64
-  const compressImage = (file: File): Promise<string> => {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const img = new Image();
-        img.onload = () => {
-          const canvas = document.createElement("canvas");
-          const maxWidth = 400;
-          const maxHeight = 400;
-          let width = img.width;
-          let height = img.height;
-
-          if (width > height) {
-            if (width > maxWidth) {
-              height *= maxWidth / width;
-              width = maxWidth;
-            }
-          } else {
-            if (height > maxHeight) {
-              width *= maxHeight / height;
-              height = maxHeight;
-            }
-          }
-
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext("2d");
-          if (ctx) {
-            ctx.drawImage(img, 0, 0, width, height);
-            resolve(canvas.toDataURL("image/jpeg", 0.7));
-          }
-        };
-        img.src = e.target?.result as string;
-      };
-      reader.readAsDataURL(file);
-    });
-  };
-
-  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const compressedImage = await compressImage(file);
-    setFormData({ ...formData, photo: compressedImage });
-  };
-
-  const handleAddSet = async () => {
-    if (!user) return;
-    if (
-      !formData.setNumber ||
-      !formData.name ||
-      !formData.buyPrice ||
-      !formData.photo
-    ) {
-      alert("Please fill in all fields and upload a photo");
-      return;
-    }
-
+  // Inventory Handlers
+  const handleAddNewSets = (formData: FormData) => {
     const newSets: Omit<LegoSet, "id">[] = [];
     for (let i = 0; i < formData.quantity; i++) {
       newSets.push({
         setNumber: formData.setNumber,
         name: formData.name,
         buyPrice: parseFloat(formData.buyPrice),
-        photo: formData.photo,
+        photo: formData.photo!,
         sellPrice: null,
         location: formData.location,
       });
     }
-
-    for (const set of newSets) {
-      await addDoc(collection(db, "users", user.uid, "sets"), set);
-    }
-
-    fetchSets();
-    setFormData({
-      setNumber: "",
-      name: "",
-      buyPrice: "",
-      quantity: 1,
-      photo: null,
-      location: "Doma",
+    addSet(newSets, {
+      onSuccess: () => setShowAddModal(false),
+      onError: () => alert("Failed to add sets."),
     });
-    setShowAddModal(false);
   };
 
-  const handleEditSet = (set: LegoSet) => {
-    setEditingSet(set);
-    setShowEditModal(true);
-  };
-
-  const handleUpdateSet = async () => {
-    if (!editingSet || !user) return;
-
-    const setRef = doc(db, "users", user.uid, "sets", editingSet.id);
-
-    await updateDoc(setRef, {
-      setNumber: editingSet.setNumber,
-      name: editingSet.name,
-      buyPrice: editingSet.buyPrice,
-      photo: editingSet.photo,
-      sellPrice: editingSet.sellPrice,
-      location: editingSet.location,
+  const handleUpdateSet = (updatedSet: LegoSet) => {
+    updateSet(updatedSet, {
+      onSuccess: () => {
+        setShowEditModal(false);
+        setEditingSet(null);
+      },
+      onError: () => alert("Failed to update set."),
     });
-
-    fetchSets();
-    setShowEditModal(false);
-    setEditingSet(null);
   };
 
-  const handleMarkAsSold = async () => {
-    if (!editingSet?.sellPrice || !user) {
+  const handleMarkAsSold = async (set: LegoSet) => {
+    if (!set.sellPrice) {
       alert("Please enter a sell price");
       return;
     }
-    const { id, ...soldSetData } = editingSet;
-    const soldSet = { ...soldSetData, soldDate: new Date().toISOString() };
-    await addDoc(collection(db, "users", user.uid, "soldSets"), soldSet);
-    await deleteDoc(doc(db, "users", user.uid, "sets", editingSet.id));
-    fetchSets();
-    fetchSoldSets();
-    setShowEditModal(false);
-    setEditingSet(null);
-  };
+    try {
+      const { id, ...soldSetData } = set;
+      const soldSet = { ...soldSetData, soldDate: new Date().toISOString() };
 
-  const handleDeleteSet = async () => {
-    if (!editingSet || !user) return;
+      // We wait for adding to sold, then delete from sets
+      addSoldSet(soldSet);
+      await deleteSetAsync(set.id);
 
-    if (
-      window.confirm(
-        `Are you sure you want to delete "${editingSet.name}"? This action cannot be undone.`
-      )
-    ) {
-      await deleteDoc(doc(db, "users", user.uid, "sets", editingSet.id));
-      fetchSets();
       setShowEditModal(false);
       setEditingSet(null);
-    }
-  };
-
-  const handleDeleteSoldSet = async () => {
-    if (!editingSoldSet || !user) return;
-
-    if (
-      window.confirm(
-        `Are you sure you want to delete "${editingSoldSet.name}"? This action cannot be undone.`
-      )
-    ) {
-      await deleteDoc(
-        doc(db, "users", user.uid, "soldSets", editingSoldSet.id)
-      );
-      fetchSoldSets();
-      setShowSoldEditModal(false);
-      setEditingSoldSet(null);
-    }
-  };
-
-  const handleDuplicateSet = async () => {
-    if (!editingSet || !user) return;
-
-    const { id, ...duplicateData } = editingSet;
-    const duplicated = {
-      ...duplicateData,
-      sellPrice: null,
-    };
-    await addDoc(collection(db, "users", user.uid, "sets"), duplicated);
-    fetchSets();
-    setShowEditModal(false);
-    setEditingSet(null);
-    alert("Set duplicated successfully!");
-  };
-
-  const handleEditSoldSet = (set: LegoSet) => {
-    setEditingSoldSet(set);
-    setShowSoldEditModal(true);
-  };
-
-  const handleUpdateSoldSet = async () => {
-    if (!editingSoldSet || !user) return;
-
-    const setRef = doc(db, "users", user.uid, "soldSets", editingSoldSet.id);
-
-    await updateDoc(setRef, {
-      setNumber: editingSoldSet.setNumber,
-      name: editingSoldSet.name,
-      buyPrice: editingSoldSet.buyPrice,
-      photo: editingSoldSet.photo,
-      sellPrice: editingSoldSet.sellPrice,
-      location: editingSoldSet.location,
-      soldDate: editingSoldSet.soldDate,
-    });
-
-    fetchSoldSets();
-    setShowSoldEditModal(false);
-    setEditingSoldSet(null);
-  };
-
-  const handleSoldSort = (type: "profit" | "profit-pct") => {
-    if (type === "profit") {
-      if (soldSortBy === "profit-asc") setSoldSortBy("profit-desc");
-      else if (soldSortBy === "profit-desc") setSoldSortBy("date");
-      else setSoldSortBy("profit-asc");
-    } else {
-      if (soldSortBy === "profit-pct-asc") setSoldSortBy("profit-pct-desc");
-      else if (soldSortBy === "profit-pct-desc") setSoldSortBy("date");
-      else setSoldSortBy("profit-pct-asc");
-    }
-  };
-
-  const getSortedAndFilteredSoldSets = () => {
-    let filtered = soldSets.filter(
-      (set) =>
-        set.name.toLowerCase().includes(soldSearchQuery.toLowerCase()) ||
-        set.setNumber.toLowerCase().includes(soldSearchQuery.toLowerCase())
-    );
-
-    return [...filtered].sort((a, b) => {
-      if (soldSortBy === "date") {
-        const dateA = new Date(a.soldDate || 0).getTime();
-        const dateB = new Date(b.soldDate || 0).getTime();
-        return dateB - dateA;
-      }
-
-      const profitA = (a.sellPrice || 0) - a.buyPrice;
-      const profitB = (b.sellPrice || 0) - b.buyPrice;
-
-      if (soldSortBy === "profit-asc") return profitA - profitB;
-      if (soldSortBy === "profit-desc") return profitB - profitA;
-
-      const profitPctA = a.sellPrice
-        ? ((a.sellPrice - a.buyPrice) / a.buyPrice) * 100
-        : 0;
-      const profitPctB = b.sellPrice
-        ? ((b.sellPrice - b.buyPrice) / b.buyPrice) * 100
-        : 0;
-
-      if (soldSortBy === "profit-pct-asc") return profitPctA - profitPctB;
-      if (soldSortBy === "profit-pct-desc") return profitPctB - profitPctA;
-
-      return 0;
-    });
-  };
-
-  const handleSort = (type: "number" | "price") => {
-    if (type === "number") {
-      if (sortBy === "number-asc") setSortBy("number-desc");
-      else if (sortBy === "number-desc") setSortBy("default");
-      else setSortBy("number-asc");
-    } else {
-      if (sortBy === "price-asc") setSortBy("price-desc");
-      else if (sortBy === "price-desc") setSortBy("default");
-      else setSortBy("price-asc");
-    }
-  };
-
-  const getSortedAndFilteredSets = () => {
-    let filtered = sets.filter(
-      (set) =>
-        set.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        set.setNumber.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-
-    if (sortBy === "default") return filtered;
-
-    return [...filtered].sort((a, b) => {
-      if (sortBy === "number-asc")
-        return a.setNumber.localeCompare(b.setNumber);
-      if (sortBy === "number-desc")
-        return b.setNumber.localeCompare(a.setNumber);
-      if (sortBy === "price-asc") return a.buyPrice - b.buyPrice;
-      if (sortBy === "price-desc") return b.buyPrice - a.buyPrice;
-      return 0;
-    });
-  };
-
-  const formatDate = (isoDate: string) => {
-    const date = new Date(isoDate);
-    const day = String(date.getDate()).padStart(2, "0");
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const year = date.getFullYear();
-    return `${day}/${month}/${year}`;
-  };
-
-  const handleEditPhotoUpload = async (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const file = e.target.files?.[0];
-    if (!file || !editingSet) return;
-
-    const compressedImage = await compressImage(file);
-    setEditingSet({ ...editingSet, photo: compressedImage });
-  };
-
-  const exportData = () => {
-    try {
-      const data = {
-        sets,
-        soldSets,
-        exportDate: new Date().toISOString(),
-      };
-      const jsonString = JSON.stringify(data, null, 2);
-      const blob = new Blob([jsonString], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-
-      const now = new Date();
-      const day = String(now.getDate()).padStart(2, "0");
-      const month = String(now.getMonth() + 1).padStart(2, "0");
-      const year = now.getFullYear();
-      a.download = `lego-tracker-${day}-${month}-${year}.json`;
-
-      a.style.display = "none";
-      document.body.appendChild(a);
-      a.click();
-
-      setTimeout(() => {
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      }, 100);
     } catch (error) {
-      const data = {
-        sets,
-        soldSets,
-        exportDate: new Date().toISOString(),
-      };
-      const jsonString = JSON.stringify(data, null, 2);
-      navigator.clipboard
-        .writeText(jsonString)
-        .then(() => {
-          alert(
-            "Export download blocked! Data has been copied to your clipboard instead. Paste it into a text file and save as .json"
-          );
-        })
-        .catch(() => {
-          alert(
-            "Export failed. Please try again or use the deployed version on Vercel."
-          );
-        });
+      alert("Error marking as sold. Please try again.");
     }
   };
 
-  const importData = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file && user) {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        try {
-          const content = event.target?.result as string;
-          const data: ImportData = JSON.parse(content);
-          console.log("Importing data:", data);
+  const handleDeleteSet = async (deleteTarget: LegoSet) => {
+    if (window.confirm(`Are you sure you want to delete "${deleteTarget.name}"? This action cannot be undone.`)) {
+      try {
+        await deleteSetAsync(deleteTarget.id);
+        setShowEditModal(false);
+        setEditingSet(null);
+      } catch (error) {
+        alert("Failed to delete set.");
+      }
+    }
+  };
 
-          const setsCollection = collection(db, "users", user.uid, "sets");
-          const soldSetsCollection = collection(
-            db,
-            "users",
-            user.uid,
-            "soldSets"
-          );
+  const handleDuplicateSet = (duplicateTarget: LegoSet) => {
+    const { id, ...duplicateData } = duplicateTarget;
+    const duplicated = { ...duplicateData, sellPrice: null };
+    // addSet takes an array of new sets
+    addSet([duplicated], {
+      onSuccess: () => {
+        setShowEditModal(false);
+        setEditingSet(null);
+        alert("Set duplicated successfully!");
+      },
+    });
+  };
 
-          // Delete all existing sets
-          const setsSnapshot = await getDocs(setsCollection);
-          const deleteSetPromises = setsSnapshot.docs.map((docSnap) =>
-            deleteDoc(docSnap.ref)
-          );
-          await Promise.all(deleteSetPromises);
+  // Sold Inventory Handlers
+  const handleUpdateSoldSet = (updatedSet: LegoSet) => {
+    updateSoldSet(updatedSet, {
+      onSuccess: () => {
+        setShowSoldEditModal(false);
+        setEditingSoldSet(null);
+      },
+    });
+  };
 
-          // Delete all existing sold sets
-          const soldSetsSnapshot = await getDocs(soldSetsCollection);
-          const deleteSoldSetPromises = soldSetsSnapshot.docs.map((docSnap) =>
-            deleteDoc(docSnap.ref)
-          );
-          await Promise.all(deleteSoldSetPromises);
-
-          console.log("Cleared existing data from Firebase");
-
-          // Import sets
-          if (data.sets && data.sets.length > 0) {
-            const addSetPromises = data.sets.map((set) => {
-              const resolvedSet = {
-                setNumber: set.setNumber,
-                name: set.name,
-                buyPrice: set.buyPrice,
-                sellPrice: set.sellPrice || null,
-                location: set.location || "Doma",
-                photo: set.photo,
-              };
-              return addDoc(setsCollection, resolvedSet);
-            });
-
-            await Promise.all(addSetPromises);
-            console.log(`Imported ${data.sets.length} sets`);
-          }
-
-          // Import sold sets
-          if (data.soldSets && data.soldSets.length > 0) {
-            const addSoldSetPromises = data.soldSets.map((soldSet) => {
-              const resolvedSoldSet = {
-                setNumber: soldSet.setNumber,
-                name: soldSet.name,
-                buyPrice: soldSet.buyPrice,
-                sellPrice: soldSet.sellPrice,
-                location: soldSet.location || "Doma",
-                photo: soldSet.photo,
-                soldDate: soldSet.soldDate,
-              };
-              return addDoc(soldSetsCollection, resolvedSoldSet);
-            });
-
-            await Promise.all(addSoldSetPromises);
-            console.log(`Imported ${data.soldSets.length} sold sets`);
-          }
-
-          await fetchSets();
-          await fetchSoldSets();
-
-          alert("Data imported successfully!");
-        } catch (error) {
-          console.error("Error importing data:", error);
-          alert(
-            `Error importing data: ${
-              error instanceof Error ? error.message : String(error)
-            }`
-          );
-        }
-      };
-      reader.readAsText(file);
+  const handleDeleteSoldSet = async (deleteTarget: LegoSet) => {
+    if (window.confirm(`Are you sure you want to delete "${deleteTarget.name}"? This action cannot be undone.`)) {
+      try {
+        await deleteSoldSetAsync(deleteTarget.id);
+        setShowSoldEditModal(false);
+        setEditingSoldSet(null);
+      } catch (error) {
+        alert("Failed to delete sold set.");
+      }
     }
   };
 
   const calculateStats = () => {
     const totalBuyPrice = soldSets.reduce((sum, set) => sum + set.buyPrice, 0);
-    const totalSellPrice = soldSets.reduce(
-      (sum, set) => sum + (set.sellPrice || 0),
-      0
-    );
+    const totalSellPrice = soldSets.reduce((sum, set) => sum + (set.sellPrice || 0), 0);
     const profit = totalSellPrice - totalBuyPrice;
-    const totalBuyPriceAllSets = [...sets, ...soldSets].reduce(
-      (sum, set) => sum + set.buyPrice,
-      0
-    );
-    // Changed: Average profit % is now total profit / total buy price * 100
-    const averageProfitPercent =
-      totalBuyPrice > 0 ? (profit / totalBuyPrice) * 100 : 0;
+    const totalBuyPriceAllSets = [...sets, ...soldSets].reduce((sum, set) => sum + set.buyPrice, 0);
+    const averageProfitPercent = totalBuyPrice > 0 ? (profit / totalBuyPrice) * 100 : 0;
+
+    // Expected profit: (Total inventory buy price) * (average profit percentage)
+    const inventoryBuyPrice = totalBuyPriceAllSets - totalBuyPrice;
+    const expectedProfit = averageProfitPercent > 0 ? inventoryBuyPrice * (averageProfitPercent / 100) : 0;
+
     return {
       totalBuyPrice,
       totalSellPrice,
       profit,
+      expectedProfit,
       totalBuyPriceAllSets,
       averageProfitPercent,
     };
   };
 
-  const stats = calculateStats();
-
-  // Loading screen
-  if (loading) {
+  // Render Loading
+  if (loadingUser) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
         <div className="text-center">
@@ -651,16 +219,13 @@ export default function App() {
     );
   }
 
-  // Login screen
+  // Render Login
   if (!user) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
         <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full text-center">
-          <h1 className="text-4xl font-bold text-gray-800 mb-2">
-            Brick Invest
-          </h1>
+          <h1 className="text-4xl font-bold text-gray-800 mb-2">Brick Invest</h1>
           <p className="text-gray-600 mb-8">Track your LEGO investments</p>
-
           <button
             onClick={handleSignIn}
             className="w-full flex items-center justify-center gap-3 bg-white border-2 border-gray-300 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-50 transition font-medium"
@@ -685,15 +250,13 @@ export default function App() {
             </svg>
             Sign in with Google
           </button>
-
-          {authError && (
-            <p className="mt-4 text-red-600 text-sm">{authError}</p>
-          )}
+          {authError && <p className="mt-4 text-red-600 text-sm">{authError}</p>}
         </div>
       </div>
     );
   }
 
+  // Render Dashboard Layout
   return (
     <div className="min-h-screen bg-gray-100 p-4">
       <div className="max-w-6xl mx-auto">
@@ -705,9 +268,7 @@ export default function App() {
               <div className="flex items-center gap-4">
                 <div className="text-right">
                   <p className="text-sm text-gray-600">Signed in as</p>
-                  <p className="text-sm font-medium text-gray-800">
-                    {user.email}
-                  </p>
+                  <p className="text-sm font-medium text-gray-800">{user.email}</p>
                 </div>
                 <button
                   onClick={handleSignOut}
@@ -721,357 +282,94 @@ export default function App() {
             </div>
           </div>
 
-          {/* Tabs */}
+          {/* Tabs Navigation */}
           <div className="flex border-b">
             <button
               onClick={() => setActiveTab("inventory")}
-              className={`px-6 py-3 font-medium ${
-                activeTab === "inventory"
-                  ? "border-b-2 border-blue-500 text-blue-500"
-                  : "text-gray-500 hover:text-gray-700"
-              }`}
+              className={`px-6 py-3 font-medium ${activeTab === "inventory"
+                ? "border-b-2 border-blue-500 text-blue-500"
+                : "text-gray-500 hover:text-gray-700"
+                }`}
             >
               Inventory ({sets.length})
             </button>
             <button
               onClick={() => setActiveTab("sold")}
-              className={`px-6 py-3 font-medium ${
-                activeTab === "sold"
-                  ? "border-b-2 border-blue-500 text-blue-500"
-                  : "text-gray-500 hover:text-gray-700"
-              }`}
+              className={`px-6 py-3 font-medium ${activeTab === "sold"
+                ? "border-b-2 border-blue-500 text-blue-500"
+                : "text-gray-500 hover:text-gray-700"
+                }`}
             >
               Sold ({soldSets.length})
             </button>
             <button
               onClick={() => setActiveTab("stats")}
-              className={`px-6 py-3 font-medium ${
-                activeTab === "stats"
-                  ? "border-b-2 border-blue-500 text-blue-500"
-                  : "text-gray-500 hover:text-gray-700"
-              }`}
+              className={`px-6 py-3 font-medium ${activeTab === "stats"
+                ? "border-b-2 border-blue-500 text-blue-500"
+                : "text-gray-500 hover:text-gray-700"
+                }`}
             >
               Stats
             </button>
           </div>
 
-          {/* Content */}
+          {/* Tab Content */}
           <div className="p-6">
-            {activeTab === "inventory" && (
-              <div>
-                <div className="mb-4 flex flex-col sm:flex-row gap-3 items-start sm:items-center">
-                  <button
-                    onClick={() => setShowAddModal(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-                  >
-                    <Plus size={20} />
-                    Add New Set
-                  </button>
-
-                  <div className="relative flex-1 max-w-md">
-                    <input
-                      type="text"
-                      placeholder="Search by name or number..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full border rounded px-3 py-2 pr-10"
-                    />
-                    {searchQuery && (
-                      <button
-                        onClick={() => setSearchQuery("")}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                      >
-                        <X size={20} />
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-gray-600">Sort by:</span>
-                    <button
-                      onClick={() => handleSort("number")}
-                      className={`px-3 py-1 text-sm rounded border ${
-                        sortBy.startsWith("number")
-                          ? "bg-blue-500 text-white border-blue-500"
-                          : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
-                      }`}
-                    >
-                      Set Number{" "}
-                      {sortBy === "number-asc"
-                        ? "↑"
-                        : sortBy === "number-desc"
-                        ? "↓"
-                        : ""}
-                    </button>
-                    <button
-                      onClick={() => handleSort("price")}
-                      className={`px-3 py-1 text-sm rounded border ${
-                        sortBy.startsWith("price")
-                          ? "bg-blue-500 text-white border-blue-500"
-                          : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
-                      }`}
-                    >
-                      Price{" "}
-                      {sortBy === "price-asc"
-                        ? "↑"
-                        : sortBy === "price-desc"
-                        ? "↓"
-                        : ""}
-                    </button>
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {getSortedAndFilteredSets().map((set) => (
-                    <div
-                      key={set.id}
-                      className="bg-white border rounded-lg p-4 hover:shadow-lg transition relative"
-                    >
-                      <img
-                        src={set.photo}
-                        alt={set.name}
-                        className="w-full h-48 object-cover rounded mb-3"
-                      />
-                      <h3 className="font-semibold text-lg mb-2">
-                        {set.name} {set.setNumber}
-                      </h3>
-                      <p className="text-gray-600">
-                        Buy Price: {Math.round(set.buyPrice)} CZK
-                      </p>
-                      <p className="text-sm text-gray-500 mt-1">
-                        Location: {set.location}
-                      </p>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleEditSet(set);
-                        }}
-                        className="absolute bottom-4 right-4 p-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 shadow-md"
-                        type="button"
-                      >
-                        <Edit2 size={18} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                {getSortedAndFilteredSets().length === 0 && (
-                  <p className="text-center text-gray-500 py-8">
-                    {searchQuery
-                      ? "No sets found matching your search."
-                      : "No sets in inventory. Add your first set!"}
-                  </p>
+            {isLoadingSets || isLoadingSoldSets ? (
+              <div className="text-center py-10">
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500 mx-auto mb-4"></div>
+                <p className="text-gray-500">Syncing data...</p>
+              </div>
+            ) : (
+              <>
+                {activeTab === "inventory" && (
+                  <InventoryTab
+                    sets={sets}
+                    onAddClick={() => setShowAddModal(true)}
+                    onEditClick={(set) => {
+                      setEditingSet(set);
+                      setShowEditModal(true);
+                    }}
+                  />
                 )}
-              </div>
-            )}
-
-            {activeTab === "sold" && (
-              <div>
-                <div className="mb-4 flex flex-col sm:flex-row gap-3 items-start sm:items-center">
-                  <div className="relative flex-1 max-w-md">
-                    <input
-                      type="text"
-                      placeholder="Search by name or number..."
-                      value={soldSearchQuery}
-                      onChange={(e) => setSoldSearchQuery(e.target.value)}
-                      className="w-full border rounded px-3 py-2 pr-10"
-                    />
-                    {soldSearchQuery && (
-                      <button
-                        onClick={() => setSoldSearchQuery("")}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                      >
-                        <X size={20} />
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-gray-600">Sort by:</span>
-                    <button
-                      onClick={() => handleSoldSort("profit")}
-                      className={`px-3 py-1 text-sm rounded border ${
-                        soldSortBy.startsWith("profit") &&
-                        !soldSortBy.includes("pct")
-                          ? "bg-blue-500 text-white border-blue-500"
-                          : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
-                      }`}
-                    >
-                      Profit{" "}
-                      {soldSortBy === "profit-asc"
-                        ? "↑"
-                        : soldSortBy === "profit-desc"
-                        ? "↓"
-                        : ""}
-                    </button>
-                    <button
-                      onClick={() => handleSoldSort("profit-pct")}
-                      className={`px-3 py-1 text-sm rounded border ${
-                        soldSortBy.includes("pct")
-                          ? "bg-blue-500 text-white border-blue-500"
-                          : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
-                      }`}
-                    >
-                      Profit %{" "}
-                      {soldSortBy === "profit-pct-asc"
-                        ? "↑"
-                        : soldSortBy === "profit-pct-desc"
-                        ? "↓"
-                        : ""}
-                    </button>
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {getSortedAndFilteredSoldSets().map((set) => {
-                    const profitPercent = set.sellPrice
-                      ? ((set.sellPrice - set.buyPrice) / set.buyPrice) * 100
-                      : 0;
-                    const profitAmount = (set.sellPrice || 0) - set.buyPrice;
-                    return (
-                      <div
-                        key={set.id}
-                        className="bg-white border rounded-lg p-4 hover:shadow-lg transition relative"
-                      >
-                        <img
-                          src={set.photo}
-                          alt={set.name}
-                          className="w-full h-48 object-cover rounded mb-3"
-                        />
-                        <h3 className="font-semibold text-lg mb-2">
-                          {set.name} {set.setNumber}
-                        </h3>
-                        <p className="text-gray-600">
-                          Buy Price: {Math.round(set.buyPrice)} CZK
-                        </p>
-                        <p className="text-green-600">
-                          Sell Price: {Math.round(set.sellPrice || 0)} CZK
-                        </p>
-                        <p
-                          className={`font-semibold ${
-                            profitAmount >= 0
-                              ? "text-green-600"
-                              : "text-red-600"
-                          }`}
-                        >
-                          Profit: {Math.round(profitAmount)} CZK (
-                          {profitPercent >= 0 ? "+" : ""}
-                          {profitPercent.toFixed(1)}%)
-                        </p>
-                        {set.soldDate && (
-                          <p className="text-xs text-gray-400 mt-2">
-                            Sold on: {formatDate(set.soldDate)}
-                          </p>
-                        )}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleEditSoldSet(set);
-                          }}
-                          className="absolute bottom-4 right-4 p-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 shadow-md"
-                          type="button"
-                        >
-                          <Edit2 size={18} />
-                        </button>
-                      </div>
-                    );
-                  })}
-                  {getSortedAndFilteredSoldSets().length === 0 && (
-                    <p className="col-span-full text-center text-gray-500 py-8">
-                      {soldSearchQuery
-                        ? "No sold sets found matching your search."
-                        : "No sold sets yet."}
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {activeTab === "stats" && (
-              <div className="max-w-2xl mx-auto">
-                <div className="bg-white border rounded-lg p-6 space-y-4">
-                  <h2 className="text-2xl font-bold mb-4">Sales Statistics</h2>
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center p-4 bg-blue-50 rounded">
-                      <span className="font-medium">
-                        Total Buy Price (All Sets):
-                      </span>
-                      <span className="text-xl font-bold text-blue-600">
-                        {Math.round(stats.totalBuyPriceAllSets)} CZK
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center p-4 bg-gray-50 rounded">
-                      <span className="font-medium">
-                        Total Buy Price (Sold Sets):
-                      </span>
-                      <span className="text-xl font-bold">
-                        {Math.round(stats.totalBuyPrice)} CZK
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center p-4 bg-gray-50 rounded">
-                      <span className="font-medium">Total Sell Price:</span>
-                      <span className="text-xl font-bold">
-                        {Math.round(stats.totalSellPrice)} CZK
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center p-4 bg-green-50 rounded">
-                      <span className="font-medium">Total Profit:</span>
-                      <span
-                        className={`text-xl font-bold ${
-                          stats.profit >= 0 ? "text-green-600" : "text-red-600"
-                        }`}
-                      >
-                        {Math.round(stats.profit)} CZK
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center p-4 bg-green-50 rounded">
-                      <span className="font-medium">Average Profit %:</span>
-                      <span
-                        className={`text-xl font-bold ${
-                          stats.averageProfitPercent >= 0
-                            ? "text-green-600"
-                            : "text-red-600"
-                        }`}
-                      >
-                        {stats.averageProfitPercent.toFixed(1)}%
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center p-4 bg-blue-50 rounded">
-                      <span className="font-medium">Sets Sold:</span>
-                      <span className="text-xl font-bold">
-                        {soldSets.length}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center p-4 bg-blue-50 rounded">
-                      <span className="font-medium">Sets in Inventory:</span>
-                      <span className="text-xl font-bold">{sets.length}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex gap-2 mt-6 justify-center">
-                  <button
-                    onClick={exportData}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-                  >
-                    <Download size={20} />
-                    Export
-                  </button>
-                  <label className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 cursor-pointer">
-                    <Upload size={20} />
-                    Import
-                    <input
-                      type="file"
-                      accept=".json"
-                      onChange={importData}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
-              </div>
+                {activeTab === "sold" && (
+                  <SoldTab
+                    soldSets={soldSets}
+                    onEditClick={(set) => {
+                      setEditingSoldSet(set);
+                      setShowSoldEditModal(true);
+                    }}
+                  />
+                )}
+                {activeTab === "stats" && (
+                  <StatsTab
+                    stats={calculateStats()}
+                    setsCount={sets.length}
+                    soldSetsCount={soldSets.length}
+                    onExport={() => exportData(sets, soldSets)}
+                    onImport={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file && user) {
+                        handleImportData(
+                          file,
+                          user,
+                          db,
+                          () => {
+                            alert("Data imported successfully!");
+                            window.location.reload(); // Simple way to force React Query refetch
+                          },
+                          (err) => alert("Import failed: " + err)
+                        );
+                      }
+                    }}
+                  />
+                )}
+              </>
             )}
           </div>
         </div>
       </div>
 
-      {/* Scroll to Top Button */}
       {showScrollTop && (activeTab === "inventory" || activeTab === "sold") && (
         <button
           onClick={scrollToTop}
@@ -1082,344 +380,31 @@ export default function App() {
         </button>
       )}
 
-      {/* Sold Set Edit Modal */}
-      {showSoldEditModal && editingSoldSet && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold">Edit Sold Price</h2>
-              <button onClick={() => setShowSoldEditModal(false)}>
-                <X size={24} />
-              </button>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <img
-                  src={editingSoldSet.photo}
-                  alt={editingSoldSet.name}
-                  className="w-full h-32 object-cover rounded"
-                />
-              </div>
-              <div>
-                <h3 className="font-semibold text-lg">
-                  {editingSoldSet.name} {editingSoldSet.setNumber}
-                </h3>
-                <p className="text-sm text-gray-600">
-                  Buy Price: {Math.round(editingSoldSet.buyPrice)} CZK
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <label className="text-sm font-medium w-32">
-                  Sell Price (CZK)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={editingSoldSet.sellPrice || ""}
-                  onChange={(e) =>
-                    setEditingSoldSet({
-                      ...editingSoldSet,
-                      sellPrice: parseFloat(e.target.value) || null,
-                    })
-                  }
-                  className="flex-1 border rounded px-3 py-2"
-                />
-              </div>
-              <div className="flex items-center gap-3">
-                <label className="text-sm font-medium w-32">Sold Date</label>
-                <input
-                  type="date"
-                  value={
-                    editingSoldSet.soldDate
-                      ? editingSoldSet.soldDate.split("T")[0]
-                      : ""
-                  }
-                  onChange={(e) =>
-                    setEditingSoldSet({
-                      ...editingSoldSet,
-                      soldDate: e.target.value
-                        ? new Date(e.target.value).toISOString()
-                        : undefined,
-                    })
-                  }
-                  className="flex-1 border rounded px-3 py-2"
-                />
-              </div>
-              <button
-                onClick={handleUpdateSoldSet}
-                className="w-full flex items-center justify-center gap-2 bg-blue-500 text-white py-2 rounded hover:bg-blue-600"
-              >
-                <Save size={20} />
-                Update
-              </button>
-              <button
-                onClick={handleDeleteSoldSet}
-                className="w-full flex items-center justify-center gap-2 bg-red-500 text-white py-2 rounded hover:bg-red-600"
-              >
-                <Trash2 size={20} />
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Add Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold">Add New Set</h2>
-              <button onClick={() => setShowAddModal(false)}>
-                <X size={24} />
-              </button>
-            </div>
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <label className="text-sm font-medium w-32">Set Number</label>
-                <input
-                  type="text"
-                  value={formData.setNumber}
-                  onChange={(e) =>
-                    setFormData({ ...formData, setNumber: e.target.value })
-                  }
-                  className="flex-1 border rounded px-3 py-2"
-                />
-              </div>
-              <div className="flex items-center gap-3">
-                <label className="text-sm font-medium w-32">Set Name</label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, name: e.target.value })
-                  }
-                  className="flex-1 border rounded px-3 py-2"
-                />
-              </div>
-              <div className="flex items-center gap-3">
-                <label className="text-sm font-medium w-32">
-                  Buy Price (CZK)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={formData.buyPrice}
-                  onChange={(e) =>
-                    setFormData({ ...formData, buyPrice: e.target.value })
-                  }
-                  className="flex-1 border rounded px-3 py-2"
-                />
-              </div>
-              <div className="flex items-center gap-3">
-                <label className="text-sm font-medium w-32">Quantity</label>
-                <input
-                  type="number"
-                  min="1"
-                  value={formData.quantity}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      quantity: parseInt(e.target.value),
-                    })
-                  }
-                  className="flex-1 border rounded px-3 py-2"
-                />
-              </div>
-              <div className="flex items-center gap-3">
-                <label className="text-sm font-medium w-32">Location</label>
-                <select
-                  value={formData.location}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      location: e.target.value as "Doma" | "Kolej",
-                    })
-                  }
-                  className="flex-1 border rounded px-3 py-2"
-                >
-                  <option value="Doma">Doma</option>
-                  <option value="Kolej">Kolej</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Photo</label>
-                {formData.photo ? (
-                  <div className="relative">
-                    <img
-                      src={formData.photo}
-                      alt="Preview"
-                      className="w-full h-48 object-cover rounded cursor-pointer"
-                      onClick={() =>
-                        document.getElementById("add-photo-input")?.click()
-                      }
-                    />
-                    <input
-                      id="add-photo-input"
-                      type="file"
-                      accept="image/*"
-                      onChange={handlePhotoUpload}
-                      className="hidden"
-                    />
-                  </div>
-                ) : (
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handlePhotoUpload}
-                    className="w-full border rounded px-3 py-2"
-                  />
-                )}
-              </div>
-              <button
-                onClick={handleAddSet}
-                className="w-full bg-blue-500 text-white py-2 rounded hover:bg-blue-600"
-              >
-                Add Set
-              </button>
-            </div>
-          </div>
-        </div>
+        <AddModal
+          onClose={() => setShowAddModal(false)}
+          onAdd={handleAddNewSets}
+        />
       )}
 
-      {/* Edit Modal */}
       {showEditModal && editingSet && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold">Edit Set</h2>
-              <button onClick={() => setShowEditModal(false)}>
-                <X size={24} />
-              </button>
-            </div>
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <label className="text-sm font-medium w-32">Set Number</label>
-                <input
-                  type="text"
-                  value={editingSet.setNumber}
-                  onChange={(e) =>
-                    setEditingSet({ ...editingSet, setNumber: e.target.value })
-                  }
-                  className="flex-1 border rounded px-3 py-2"
-                />
-              </div>
-              <div className="flex items-center gap-3">
-                <label className="text-sm font-medium w-32">Set Name</label>
-                <input
-                  type="text"
-                  value={editingSet.name}
-                  onChange={(e) =>
-                    setEditingSet({ ...editingSet, name: e.target.value })
-                  }
-                  className="flex-1 border rounded px-3 py-2"
-                />
-              </div>
-              <div className="flex items-center gap-3">
-                <label className="text-sm font-medium w-32">
-                  Buy Price (CZK)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={editingSet.buyPrice}
-                  onChange={(e) =>
-                    setEditingSet({
-                      ...editingSet,
-                      buyPrice: parseFloat(e.target.value),
-                    })
-                  }
-                  className="flex-1 border rounded px-3 py-2"
-                />
-              </div>
-              <div className="flex items-center gap-3">
-                <label className="text-sm font-medium w-32">
-                  Sell Price (CZK)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={editingSet.sellPrice || ""}
-                  onChange={(e) =>
-                    setEditingSet({
-                      ...editingSet,
-                      sellPrice: parseFloat(e.target.value) || null,
-                    })
-                  }
-                  className="flex-1 border rounded px-3 py-2"
-                />
-              </div>
-              <div className="flex items-center gap-3">
-                <label className="text-sm font-medium w-32">Location</label>
-                <select
-                  value={editingSet.location}
-                  onChange={(e) =>
-                    setEditingSet({
-                      ...editingSet,
-                      location: e.target.value as "Doma" | "Kolej",
-                    })
-                  }
-                  className="flex-1 border rounded px-3 py-2"
-                >
-                  <option value="Doma">Doma</option>
-                  <option value="Kolej">Kolej</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Photo</label>
-                <div className="relative">
-                  <img
-                    src={editingSet.photo}
-                    alt="Preview"
-                    className="w-full h-48 object-cover rounded cursor-pointer"
-                    onClick={() =>
-                      document.getElementById("edit-photo-input")?.click()
-                    }
-                  />
-                  <input
-                    id="edit-photo-input"
-                    type="file"
-                    accept="image/*"
-                    onChange={handleEditPhotoUpload}
-                    className="hidden"
-                  />
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={handleUpdateSet}
-                  className="flex-1 flex items-center justify-center gap-2 bg-blue-500 text-white py-2 rounded hover:bg-blue-600"
-                >
-                  <Save size={20} />
-                  Save Changes
-                </button>
-                <button
-                  onClick={handleMarkAsSold}
-                  className="flex-1 flex items-center justify-center gap-2 bg-green-500 text-white py-2 rounded hover:bg-green-600"
-                >
-                  <DollarSign size={20} />
-                  Mark as Sold
-                </button>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={handleDuplicateSet}
-                  className="flex-1 flex items-center justify-center gap-2 bg-purple-500 text-white py-2 rounded hover:bg-purple-600"
-                >
-                  <Copy size={20} />
-                  Duplicate
-                </button>
-                <button
-                  onClick={handleDeleteSet}
-                  className="flex-1 bg-red-500 text-white py-2 rounded hover:bg-red-600 flex items-center justify-center gap-2"
-                >
-                  <Trash2 size={20} />
-                  Delete
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <EditModal
+          set={editingSet}
+          onClose={() => setShowEditModal(false)}
+          onUpdate={handleUpdateSet}
+          onMarkAsSold={handleMarkAsSold}
+          onDelete={handleDeleteSet}
+          onDuplicate={handleDuplicateSet}
+        />
+      )}
+
+      {showSoldEditModal && editingSoldSet && (
+        <SoldEditModal
+          set={editingSoldSet}
+          onClose={() => setShowSoldEditModal(false)}
+          onUpdate={handleUpdateSoldSet}
+          onDelete={handleDeleteSoldSet}
+        />
       )}
     </div>
   );
