@@ -1,4 +1,4 @@
-const CACHE_NAME = 'brick-invest-cache-v2';
+const CACHE_NAME = 'brick-invest-cache-v3';
 
 // We intercept all requests but always attempt to hit the network first.
 // If the network fails (offline), we fall back to the cache.
