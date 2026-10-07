@@ -14,6 +14,7 @@ import { SoldEditModal } from "./components/SoldEditModal";
 import { InventoryTab } from "./components/InventoryTab";
 import { SoldTab } from "./components/SoldTab";
 import { StatsTab } from "./components/StatsTab";
+import { AssistantTab } from "./components/AssistantTab";
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -311,6 +312,15 @@ export default function App() {
             >
               Stats
             </button>
+            <button
+              onClick={() => setActiveTab("assistant")}
+              className={`px-6 py-3 font-medium ${activeTab === "assistant"
+                ? "border-b-2 border-blue-500 text-blue-500"
+                : "text-gray-500 hover:text-gray-700"
+                }`}
+            >
+              Assistant
+            </button>
           </div>
 
           {/* Tab Content */}
@@ -363,6 +373,9 @@ export default function App() {
                       }
                     }}
                   />
+                )}
+                {activeTab === "assistant" && (
+                  <AssistantTab user={user} />
                 )}
               </>
             )}
