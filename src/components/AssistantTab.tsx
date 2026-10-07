@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { Bot, Send } from "lucide-react";
 import { User } from "firebase/auth";
 
@@ -21,6 +23,8 @@ export const AssistantTab = ({ user }: AssistantTabProps) => {
         "Ahoj. Můžeš se mě zeptat například na počet zbývajících setů, hodnotu skladu, tržby, zisk nebo průměrnou prodejní cenu.",
     },
   ]);
+  const completedHistory = useRef<Message[]>([]);
+  const sending = useRef(false);
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState("");
@@ -28,11 +32,13 @@ export const AssistantTab = ({ user }: AssistantTabProps) => {
   const askAssistant = async (message: string) => {
     const trimmed = message.trim();
 
-    if (!trimmed || isSending) {
+    if (!trimmed || sending.current) {
       return;
     }
 
+    sending.current = true;
     setError("");
+    const history = completedHistory.current;
     setIsSending(true);
 
     setMessages((current) => [
@@ -57,6 +63,7 @@ export const AssistantTab = ({ user }: AssistantTabProps) => {
           },
           body: JSON.stringify({
             message: trimmed,
+            history,
           }),
         });
 
@@ -72,7 +79,7 @@ export const AssistantTab = ({ user }: AssistantTabProps) => {
 
         try {
           const body = await response.json();
-          detail = body?.detail || detail;
+          detail = typeof body?.detail === "string" ? body.detail : detail;
         } catch {
           // Keep the HTTP error text.
         }
@@ -84,8 +91,18 @@ export const AssistantTab = ({ user }: AssistantTabProps) => {
 
       const answer =
         typeof data?.answer === "string"
-          ? data.answer.replace(/\*\*/g, "")
+          ? data.answer
           : "Asistent nevrátil textovou odpověď.";
+
+      const nextHistory: Message[] = [
+        ...history,
+        { role: "user" as const, content: trimmed },
+        { role: "assistant" as const, content: answer },
+      ].slice(-6);
+      while (nextHistory.reduce((sum, item) => sum + item.content.length, 0) > 12000) {
+        nextHistory.splice(0, 2);
+      }
+      completedHistory.current = nextHistory;
 
       setMessages((current) => [
         ...current,
@@ -103,6 +120,7 @@ export const AssistantTab = ({ user }: AssistantTabProps) => {
           : "Nepodařilo se spojit s BrickInvest Assistantem."
       );
     } finally {
+      sending.current = false;
       setIsSending(false);
     }
   };
@@ -135,6 +153,14 @@ export const AssistantTab = ({ user }: AssistantTabProps) => {
               GPT-6 Luna · živá data z BrickInvestu
             </p>
           </div>
+          <button type="button" disabled={isSending}
+            className="ml-auto text-sm px-3 py-2 rounded border bg-white disabled:opacity-50"
+            onClick={() => {
+              completedHistory.current = [];
+              setMessages([]);
+              setInput("");
+              setError("");
+            }}>Nový chat</button>
         </div>
 
         <div className="p-4 min-h-[320px] max-h-[520px] overflow-y-auto space-y-3 bg-gray-50">
@@ -146,13 +172,27 @@ export const AssistantTab = ({ user }: AssistantTabProps) => {
               }`}
             >
               <div
-                className={`max-w-[85%] rounded-lg px-4 py-3 whitespace-pre-wrap ${
+                className={`min-w-0 max-w-[95%] sm:max-w-[85%] rounded-lg px-4 py-3 ${
                   message.role === "user"
-                    ? "bg-blue-500 text-white"
+                    ? "bg-blue-500 text-white whitespace-pre-wrap break-words"
                     : "bg-white border text-gray-800"
                 }`}
               >
-                {message.content}
+                {message.role === "assistant" ? (
+                  <div className="assistant-markdown">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml
+                      disallowedElements={["img"]}
+                      components={{
+                        table: ({ node, ...props }) => (
+                          <div className="assistant-table-scroll" role="region" aria-label="Tabulka odpovědi" tabIndex={0}>
+                            <table {...props} />
+                          </div>
+                        ),
+                        a: ({ node, ...props }) => <a {...props} target="_blank" rel="noopener noreferrer" />,
+                      }}
+                    >{message.content}</ReactMarkdown>
+                  </div>
+                ) : message.content}
               </div>
             </div>
           ))}
@@ -185,6 +225,8 @@ export const AssistantTab = ({ user }: AssistantTabProps) => {
 
           <form onSubmit={handleSubmit} className="flex gap-2">
             <input
+              maxLength={4000}
+              aria-label="Dotaz pro asistenta"
               value={input}
               onChange={(event) => setInput(event.target.value)}
               placeholder="Zeptej se na své LEGO investice…"
